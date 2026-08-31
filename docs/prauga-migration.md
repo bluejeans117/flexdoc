@@ -17,23 +17,15 @@ FlexDoc is moving from the original personal `bluejeans` package namespace to Pr
 
 The old npm packages are deprecated only after their matching `@prauga/*` replacements are publicly installable. They are not unpublished.
 
-The repository includes a guarded helper:
+From an npm owner session (add `--otp=<code>` if 2FA prompts):
 
-```bash
-npm run deprecate:bluejeans
-npm run deprecate:bluejeans -- --apply
+```powershell
+npm deprecate "@bluejeans/flexdoc-client@*" "This package has moved to @prauga/flexdoc-client. Please migrate to the @prauga scope; @bluejeans/flexdoc-client is no longer maintained."
+npm deprecate "@bluejeans/flexdoc-backend@*" "This package has moved to @prauga/flexdoc-backend. Please migrate to the @prauga scope; @bluejeans/flexdoc-backend is no longer maintained."
+npm deprecate "@bluejeans/flexdoc-cli@*" "This package has moved to @prauga/flexdoc-cli. Please migrate to the @prauga scope; @bluejeans/flexdoc-cli is no longer maintained."
 ```
 
-The first command is a dry run. `--apply` requires an authenticated npm owner session, verifies the replacement package exists, and then applies the migration message to every published version of the old package.
-
-Equivalent explicit commands are:
-
-```bash
-npm deprecate '@bluejeans/flexdoc-client@*' 'This package has moved to @prauga/flexdoc-client. Please migrate to the @prauga scope; @bluejeans/flexdoc-client is no longer maintained.'
-npm deprecate '@bluejeans/flexdoc-backend@*' 'This package has moved to @prauga/flexdoc-backend. Please migrate to the @prauga scope; @bluejeans/flexdoc-backend is no longer maintained.'
-npm deprecate '@bluejeans/flexdoc-core@*' 'This package has moved to @prauga/flexdoc-core. Please migrate to the @prauga scope; @bluejeans/flexdoc-core is no longer maintained.'
-npm deprecate '@bluejeans/flexdoc-cli@*' 'This package has moved to @prauga/flexdoc-cli. Please migrate to the @prauga scope; @bluejeans/flexdoc-cli is no longer maintained.'
-```
+`@bluejeans/flexdoc-core` was never published.
 
 There is no analogous Maven deprecation step in this migration. The new Prauga Maven coordinate is a new artifact line.
 
@@ -43,7 +35,7 @@ There is no analogous Maven deprecation step in this migration. The new Prauga M
 2. Publish `@prauga/flexdoc-client@2.1.0` and `@prauga/flexdoc-backend@2.1.0` from `js/v2.1.0`.
 3. Publish `@prauga/flexdoc-core@0.1.0` from `core/v0.1.0`.
 4. Publish `@prauga/flexdoc-cli@0.1.0` from `cli/v0.1.0` after the client exists on npm.
-5. Deprecate the published `@bluejeans/*` packages using the guarded helper.
+5. Deprecate the published `@bluejeans/*` packages with `npm deprecate`.
 6. Publish `prauga-flexdoc` from `python/v0.1.0`, `prauga-flexdoc-axum` from `rust/v0.1.0`, and the Go module using `adapters/go/v0.1.0`.
 7. Verify the Maven Central namespace `com.prauga.flexdoc`, then publish `com.prauga.flexdoc:flexdoc-spring-boot-starter:0.2.0` from `java/v0.2.0`.
 
