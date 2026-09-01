@@ -50,10 +50,58 @@ describe('api-client-workspace', () => {
       }],
     });
 
-    expect(migrated.version).toBe(2);
+    expect(migrated.version).toBe(3);
     expect(migrated.collections[0].name).toBe('Legacy');
     expect(migrated.requests[0].request.url).toBe('{{baseUrl}}/pets');
+    expect(migrated.requests[0].scripts).toBeUndefined();
     expect(migrated.environments).toEqual([]);
+  });
+
+  it('migrates version 2 workspaces while preserving environments', () => {
+    const migrated = normalizeApiClientWorkspace({
+      version: 2,
+      collections: [{ id: 'collection-1', name: 'Existing', createdAt: '2026-01-01', updatedAt: '2026-01-01' }],
+      folders: [],
+      requests: [],
+      environments: [{ id: 'environment-1', name: 'Local', variables: [], createdAt: '2026-01-01', updatedAt: '2026-01-01' }],
+      activeEnvironmentId: 'environment-1',
+    });
+
+    expect(migrated.version).toBe(3);
+    expect(migrated.environments).toHaveLength(1);
+    expect(migrated.activeEnvironmentId).toBe('environment-1');
+  });
+
+  it('preserves valid saved scripts and strips malformed script payloads', () => {
+    const normalized = normalizeApiClientWorkspace({
+      version: 3,
+      collections: [{ id: 'collection-1', name: 'Scripts', createdAt: '2026-09-01', updatedAt: '2026-09-01' }],
+      folders: [],
+      requests: [
+        {
+          id: 'request-good',
+          collectionId: 'collection-1',
+          name: 'Good',
+          request: { method: 'GET', url: '/pets' },
+          scripts: { preRequest: 'console.log(1)', tests: "pm.test('ok', () => {})" },
+          createdAt: '2026-09-01',
+          updatedAt: '2026-09-01',
+        },
+        {
+          id: 'request-bad-scripts',
+          collectionId: 'collection-1',
+          name: 'Still valid request',
+          request: { method: 'GET', url: '/owners' },
+          scripts: { preRequest: 42, tests: null },
+          createdAt: '2026-09-01',
+          updatedAt: '2026-09-01',
+        },
+      ],
+      environments: [],
+    });
+
+    expect(normalized.requests[0].scripts).toEqual({ preRequest: 'console.log(1)', tests: "pm.test('ok', () => {})" });
+    expect(normalized.requests[1].scripts).toBeUndefined();
   });
 
   it('filters corrupt IndexedDB entries while preserving valid environments and variables', () => {

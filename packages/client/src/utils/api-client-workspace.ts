@@ -1,4 +1,5 @@
 import type { HttpAuth, HttpKeyValue, HttpRequestDraft } from './http-client';
+import type { ApiClientRequestScripts } from './api-client-scripting';
 
 export interface ApiClientCollection {
   id: string;
@@ -21,6 +22,7 @@ export interface ApiClientSavedRequest {
   folderId?: string;
   name: string;
   request: HttpRequestDraft;
+  scripts?: ApiClientRequestScripts;
   createdAt: string;
   updatedAt: string;
 }
@@ -41,7 +43,7 @@ export interface ApiClientEnvironment {
 }
 
 export interface ApiClientWorkspaceState {
-  version: 2;
+  version: 3;
   collections: ApiClientCollection[];
   folders: ApiClientFolder[];
   requests: ApiClientSavedRequest[];
@@ -110,15 +112,32 @@ function isFolder(value: unknown): value is ApiClientFolder {
     && hasString(value, 'updatedAt');
 }
 
-function isSavedRequest(value: unknown): value is ApiClientSavedRequest {
-  return isRecord(value)
-    && hasString(value, 'id')
-    && hasString(value, 'collectionId')
-    && (value.folderId === undefined || typeof value.folderId === 'string')
-    && hasString(value, 'name')
-    && isHttpRequestDraft(value.request)
-    && hasString(value, 'createdAt')
-    && hasString(value, 'updatedAt');
+function normalizeScripts(value: unknown): ApiClientRequestScripts | undefined {
+  if (!isRecord(value) || !hasString(value, 'preRequest') || !hasString(value, 'tests')) return undefined;
+  return { preRequest: value.preRequest as string, tests: value.tests as string };
+}
+
+function normalizeSavedRequest(value: unknown): ApiClientSavedRequest | null {
+  if (!isRecord(value)
+    || !hasString(value, 'id')
+    || !hasString(value, 'collectionId')
+    || (value.folderId !== undefined && typeof value.folderId !== 'string')
+    || !hasString(value, 'name')
+    || !isHttpRequestDraft(value.request)
+    || !hasString(value, 'createdAt')
+    || !hasString(value, 'updatedAt')) return null;
+
+  const scripts = normalizeScripts(value.scripts);
+  return {
+    id: value.id as string,
+    collectionId: value.collectionId as string,
+    folderId: value.folderId as string | undefined,
+    name: value.name as string,
+    request: value.request,
+    ...(scripts ? { scripts } : {}),
+    createdAt: value.createdAt as string,
+    updatedAt: value.updatedAt as string,
+  };
 }
 
 function isEnvironmentVariable(value: unknown): value is ApiClientEnvironmentVariable {
@@ -169,7 +188,7 @@ export function cloneRequestDraft(request: HttpRequestDraft): HttpRequestDraft {
 export function createDefaultApiClientWorkspace(): ApiClientWorkspaceState {
   const timestamp = now();
   return {
-    version: 2,
+    version: 3,
     collections: [{ id: createApiClientId('collection'), name: DEFAULT_COLLECTION_NAME, createdAt: timestamp, updatedAt: timestamp }],
     folders: [],
     requests: [],
@@ -178,7 +197,7 @@ export function createDefaultApiClientWorkspace(): ApiClientWorkspaceState {
 }
 
 export function normalizeApiClientWorkspace(value: unknown): ApiClientWorkspaceState {
-  if (!isRecord(value) || (value.version !== 1 && value.version !== 2)) return createDefaultApiClientWorkspace();
+  if (!isRecord(value) || (value.version !== 1 && value.version !== 2 && value.version !== 3)) return createDefaultApiClientWorkspace();
 
   const collectionValues = Array.isArray(value.collections) ? value.collections.filter(isCollection) : [];
   if (collectionValues.length === 0) return createDefaultApiClientWorkspace();
@@ -188,7 +207,9 @@ export function normalizeApiClientWorkspace(value: unknown): ApiClientWorkspaceS
     .filter((folder) => collectionIds.has(folder.collectionId));
   const foldersById = new Map(folderValues.map((folder) => [folder.id, folder]));
 
-  const requestValues = (Array.isArray(value.requests) ? value.requests.filter(isSavedRequest) : [])
+  const requestValues = (Array.isArray(value.requests) ? value.requests : [])
+    .map(normalizeSavedRequest)
+    .filter((request): request is ApiClientSavedRequest => request !== null)
     .filter((request) => collectionIds.has(request.collectionId))
     .map((request) => {
       if (!request.folderId) return request;
@@ -198,7 +219,7 @@ export function normalizeApiClientWorkspace(value: unknown): ApiClientWorkspaceS
 
   if (value.version === 1) {
     return {
-      version: 2,
+      version: 3,
       collections: collectionValues,
       folders: folderValues,
       requests: requestValues,
@@ -215,7 +236,7 @@ export function normalizeApiClientWorkspace(value: unknown): ApiClientWorkspaceS
     : undefined;
 
   return {
-    version: 2,
+    version: 3,
     collections: collectionValues,
     folders: folderValues,
     requests: requestValues,
