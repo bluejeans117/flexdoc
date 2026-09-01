@@ -283,7 +283,7 @@ export const ApiClient: React.FC<ApiClientProps> = ({
               aria-label='Pre-request script'
               rows={8}
               className={`mt-1 w-full rounded-md border px-3 py-2 font-mono text-xs ${inputClass}`}
-              placeholder="pm.environment.set('token', '...');\npm.request.headers.set('X-Trace', 'value');"
+              placeholder="flex.environment.set('token', '...');\nflex.request.headers.set('X-Trace', 'value');"
               value={scripts.preRequest}
               onChange={(event) => setScripts((current) => ({ ...current, preRequest: event.target.value }))}
             />
@@ -293,7 +293,7 @@ export const ApiClient: React.FC<ApiClientProps> = ({
               aria-label='Tests script'
               rows={8}
               className={`mt-1 w-full rounded-md border px-3 py-2 font-mono text-xs ${inputClass}`}
-              placeholder="pm.test('status is 200', () => {\n  pm.expect(pm.response.code).to.equal(200);\n});"
+              placeholder="flex.test('status is 200', () => {\n  flex.expect(flex.response.code).to.equal(200);\n});"
               value={scripts.tests}
               onChange={(event) => setScripts((current) => ({ ...current, tests: event.target.value }))}
             />
