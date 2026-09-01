@@ -6,7 +6,7 @@ on:
     branches: [main]
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   playwright:
@@ -15,8 +15,6 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v6
-        with:
-          ref: ${{ github.event.pull_request.head.sha || github.sha }}
 
       - name: Setup Node.js
         uses: actions/setup-node@v6
@@ -29,39 +27,6 @@ jobs:
 
       - name: Build canonical standalone renderer
         run: npm run build:client
-
-      - name: Synchronize adapter renderer assets
-        run: npm run sync:adapter-assets
-
-      - name: Apply AGPL-3.0-or-later notice
-        run: |
-          python - <<'PY'
-          from pathlib import Path
-
-          path = Path('LICENSE')
-          text = path.read_text()
-          notice = '''SPDX-License-Identifier: AGPL-3.0-or-later
-
-          FlexDoc is free software: you can redistribute it and/or modify it under the terms of
-          the GNU Affero General Public License as published by the Free Software Foundation,
-          either version 3 of the License, or (at your option) any later version.
-
-          '''
-          if not text.startswith('SPDX-License-Identifier: AGPL-3.0-or-later'):
-              path.write_text(notice + text)
-          PY
-
-      - name: Commit generated repository updates
-        if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
-        run: |
-          if git diff --quiet -- LICENSE adapters/go/assets adapters/python/src/prauga_flexdoc/_assets adapters/rust/assets; then
-            exit 0
-          fi
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add LICENSE adapters/go/assets adapters/python/src/prauga_flexdoc/_assets adapters/rust/assets
-          git commit -m "Sync generated assets and license notice"
-          git push origin HEAD:${{ github.head_ref }}
 
       - name: Install CLI dependencies using local Prauga client
         run: npm install --prefix tools/flexdoc-cli --no-save --package-lock=false --ignore-scripts --no-audit --no-fund "${{ github.workspace }}/packages/client" js-yaml@^4.1.0
