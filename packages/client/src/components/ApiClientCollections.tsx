@@ -24,9 +24,10 @@ function timestamp(): string {
 }
 
 export const ApiClientCollections: React.FC<Props> = ({ request, onLoadRequest, theme, persistenceKey }) => {
-  const [workspace, setWorkspace] = useState<ApiClientWorkspaceState>(() => createDefaultApiClientWorkspace());
+  const initialWorkspace = createDefaultApiClientWorkspace();
+  const [workspace, setWorkspace] = useState<ApiClientWorkspaceState>(initialWorkspace);
   const [hydrated, setHydrated] = useState(persistenceKey === false);
-  const [selectedCollectionId, setSelectedCollectionId] = useState(() => workspace.collections[0].id);
+  const [selectedCollectionId, setSelectedCollectionId] = useState(initialWorkspace.collections[0].id);
   const [selectedFolderId, setSelectedFolderId] = useState('');
   const [collectionName, setCollectionName] = useState('');
   const [folderName, setFolderName] = useState('');
