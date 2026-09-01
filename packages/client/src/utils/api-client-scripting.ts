@@ -252,14 +252,14 @@ export async function runApiClientScript(options: {
     json: () => JSON.parse(options.response?.body || ''),
   } : undefined;
 
-  const pm = {
+  const flex = {
     request,
     response,
     environment,
     variables: localVariables,
     expect: createExpectation,
     test(name: string, callback: () => unknown | Promise<unknown>): void {
-      if (options.phase !== 'tests') throw new Error('pm.test is only available in post-response test scripts.');
+      if (options.phase !== 'tests') throw new Error('flex.test is only available in post-response test scripts.');
       const promise = Promise.resolve()
         .then(callback)
         .then(() => { tests.push({ name, passed: true }); })
@@ -278,10 +278,10 @@ export async function runApiClientScript(options: {
   try {
     // Request scripts are intentionally trusted local JavaScript, matching the API-client use case.
     // The package documentation calls out that this is not a security sandbox.
-    type PmApi = typeof pm;
+    type FlexApi = typeof flex;
     type ScriptConsole = typeof scriptConsole;
-    const execute = new Function('pm', 'console', `"use strict"; return (async () => {\n${options.script}\n})();`) as (api: PmApi, logger: ScriptConsole) => Promise<void>;
-    await execute(pm, scriptConsole);
+    const execute = new Function('flex', 'console', `"use strict"; return (async () => {\n${options.script}\n})();`) as (api: FlexApi, logger: ScriptConsole) => Promise<void>;
+    await execute(flex, scriptConsole);
     await Promise.all(pendingTests);
     return { draft, variables, environmentVariables, environmentChanges, tests, logs };
   } catch (cause) {
