@@ -5,13 +5,13 @@ describe('api-client-scripting', () => {
     const result = await runApiClientScript({
       phase: 'pre-request',
       script: `
-        pm.environment.set('token', 'secret-42');
-        pm.variables.set('petId', '99');
-        pm.request.url = '{{baseUrl}}/pets/{{petId}}';
-        pm.request.headers.set('X-Token', '{{token}}');
-        pm.request.method = 'PATCH';
-        pm.request.body.raw = JSON.stringify({ name: 'Milo' });
-        console.log('prepared', pm.request.method);
+        flex.environment.set('token', 'secret-42');
+        flex.variables.set('petId', '99');
+        flex.request.url = '{{baseUrl}}/pets/{{petId}}';
+        flex.request.headers.set('X-Token', '{{token}}');
+        flex.request.method = 'PATCH';
+        flex.request.body.raw = JSON.stringify({ name: 'Milo' });
+        console.log('prepared', flex.request.method);
       `,
       draft: { method: 'GET', url: '{{baseUrl}}/pets/1', headers: [], body: '' },
       variables: { baseUrl: 'https://api.example.test' },
@@ -33,10 +33,10 @@ describe('api-client-scripting', () => {
     const result = await runApiClientScript({
       phase: 'tests',
       script: `
-        pm.test('status is 200', () => pm.expect(pm.response.code).to.equal(200));
-        pm.test('body has pet id', () => pm.expect(pm.response.json()).to.have.property('id', 42));
-        pm.test('intentional failure', () => pm.expect(pm.response.headers.get('x-trace')).to.equal('wrong'));
-        pm.environment.set('lastPet', String(pm.response.json().id));
+        flex.test('status is 200', () => flex.expect(flex.response.code).to.equal(200));
+        flex.test('body has pet id', () => flex.expect(flex.response.json()).to.have.property('id', 42));
+        flex.test('intentional failure', () => flex.expect(flex.response.headers.get('x-trace')).to.equal('wrong'));
+        flex.environment.set('lastPet', String(flex.response.json().id));
         console.warn('checked response');
       `,
       draft: { method: 'GET', url: 'https://api.example.test/pets/42' },
