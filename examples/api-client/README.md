@@ -11,4 +11,4 @@ npm install
 npm run example:api-client
 ```
 
-Then open the Vite URL printed in the terminal.
+Then open the Vite URL printed in the terminal. To verify the example without starting a dev server, run `npm run build -w examples/api-client`.
