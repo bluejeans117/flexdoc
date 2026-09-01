@@ -6,7 +6,7 @@ on:
     branches: [main]
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   playwright:
@@ -27,6 +27,21 @@ jobs:
 
       - name: Build canonical standalone renderer
         run: npm run build:client
+
+      - name: Synchronize adapter renderer assets
+        run: npm run sync:adapter-assets
+
+      - name: Commit synchronized adapter renderer assets
+        if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
+        run: |
+          if git diff --quiet -- adapters/go/assets adapters/python/src/prauga_flexdoc/_assets adapters/rust/assets; then
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add adapters/go/assets adapters/python/src/prauga_flexdoc/_assets adapters/rust/assets
+          git commit -m "Sync adapter renderer assets"
+          git push origin HEAD:${{ github.head_ref }}
 
       - name: Install CLI dependencies using local Prauga client
         run: npm install --prefix tools/flexdoc-cli --no-save --package-lock=false --ignore-scripts --no-audit --no-fund "${{ github.workspace }}/packages/client" js-yaml@^4.1.0
