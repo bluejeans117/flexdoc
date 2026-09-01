@@ -19,6 +19,14 @@ export { buildRequest, initialRequestValues, parametersFor } from './utils/reque
 export type { BuiltRequest, RequestValues, RequestValue } from './utils/request-builder';
 export { buildHttpRequest, requestDraftFromBuiltRequest, resolveHttpRequestDraftVariables } from './utils/http-client';
 export type { HttpAuth, HttpKeyValue, HttpRequestBuildOptions, HttpRequestDraft, HttpVariables } from './utils/http-client';
+export { cloneApiClientScripts, EMPTY_API_CLIENT_SCRIPTS, runApiClientScript } from './utils/api-client-scripting';
+export type {
+  ApiClientRequestScripts,
+  ApiClientScriptEnvironmentChange,
+  ApiClientScriptResponse,
+  ApiClientScriptRunResult,
+  ApiClientScriptTestResult,
+} from './utils/api-client-scripting';
 export type {
   ApiClientCollection,
   ApiClientEnvironment,
