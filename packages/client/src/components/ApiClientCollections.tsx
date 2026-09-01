@@ -36,7 +36,6 @@ export const ApiClientCollections: React.FC<Props> = ({ request, onLoadRequest, 
   useEffect(() => {
     if (persistenceKey === false) return;
     let cancelled = false;
-    setHydrated(false);
     loadApiClientWorkspace(persistenceKey)
       .then((next) => {
         if (cancelled) return;
