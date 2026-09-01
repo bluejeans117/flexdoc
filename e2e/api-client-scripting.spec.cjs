@@ -48,16 +48,16 @@ test('API Client runs and persists pre-request scripts and response tests', asyn
 
   await apiClient.getByLabel('Request URL').fill('{{baseUrl}}/pets/{{petId}}');
   const preRequestScript = [
-    "pm.variables.set('petId', '77');",
-    "pm.request.headers.set('X-Script', 'run-77');",
-    "pm.environment.set('lastRun', 'pre');",
-    "console.log('prepared', pm.variables.get('petId'));",
+    "flex.variables.set('petId', '77');",
+    "flex.request.headers.set('X-Script', 'run-77');",
+    "flex.environment.set('lastRun', 'pre');",
+    "console.log('prepared', flex.variables.get('petId'));",
   ].join('\n');
   const testScript = [
-    "pm.test('status is 200', () => pm.expect(pm.response.code).to.equal(200));",
-    "pm.test('body id is 77', () => pm.expect(pm.response.json()).to.have.property('id', 77));",
-    "pm.environment.set('lastPet', String(pm.response.json().id));",
-    "console.log('tested', pm.response.code);",
+    "flex.test('status is 200', () => flex.expect(flex.response.code).to.equal(200));",
+    "flex.test('body id is 77', () => flex.expect(flex.response.json()).to.have.property('id', 77));",
+    "flex.environment.set('lastPet', String(flex.response.json().id));",
+    "console.log('tested', flex.response.code);",
   ].join('\n');
 
   await apiClient.getByLabel('Pre-request script').fill(preRequestScript);
