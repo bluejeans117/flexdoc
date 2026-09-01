@@ -29,8 +29,9 @@ export const ApiClientWorkspace: React.FC<ApiClientWorkspaceProps> = ({
   onRequestChange,
   ...apiClientProps
 }) => {
-  const [editorRequest, setEditorRequest] = useState<HttpRequestDraft>(() => withWorkspaceDefaults(initialRequest));
-  const [currentRequest, setCurrentRequest] = useState<HttpRequestDraft>(() => withWorkspaceDefaults(initialRequest));
+  const initialDraft = withWorkspaceDefaults(initialRequest);
+  const [editorRequest, setEditorRequest] = useState<HttpRequestDraft>(initialDraft);
+  const [currentRequest, setCurrentRequest] = useState<HttpRequestDraft>(initialDraft);
   const [editorRevision, setEditorRevision] = useState(0);
 
   const handleRequestChange = (request: BuiltRequest) => {
