@@ -29,8 +29,8 @@ export function App() {
           auth: { type: 'none' },
         }}
         initialScripts={{
-          preRequest: "pm.variables.set('postId', '1');\nconsole.log('requesting post', pm.variables.get('postId'));",
-          tests: "pm.test('status is 200', () => pm.expect(pm.response.code).to.equal(200));\npm.test('post id is 1', () => pm.expect(pm.response.json()).to.have.property('id', 1));",
+          preRequest: "flex.variables.set('postId', '1');\nconsole.log('requesting post', flex.variables.get('postId'));",
+          tests: "flex.test('status is 200', () => flex.expect(flex.response.code).to.equal(200));\nflex.test('post id is 1', () => flex.expect(flex.response.json()).to.have.property('id', 1));",
         }}
       />
     </main>
