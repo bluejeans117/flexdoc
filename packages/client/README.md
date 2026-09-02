@@ -41,9 +41,9 @@ function RequestEditor() {
 }
 ```
 
-For a local API-development workspace with reusable collections, folders, saved requests, named environments, and request scripts, use `ApiClientWorkspace`. Workspace data is persisted in IndexedDB by default and stays local to the browser. Set `persistenceKey={false}` to disable persistence, or provide a custom string to isolate multiple workspaces.
+For a local API-development workspace with reusable collections, folders, saved requests, named environments, request scripts, response tests, and request history, use `ApiClientWorkspace`. Workspace data is persisted in IndexedDB by default and stays local to the browser. Set `persistenceKey={false}` to disable persistence, or provide a custom string to isolate multiple workspaces.
 
-Saved request drafts, scripts, and environment values are stored as entered, including authentication values such as bearer tokens, basic-auth passwords, API keys, and tokens placed in environment variables or scripts. Environment values are displayed as plain text. IndexedDB is scoped by the browser origin, but FlexDoc does not encrypt these values or create an additional security boundary between persistence keys on the same origin. Only persist secrets on origins and devices you trust.
+Saved request drafts, scripts, environment values, and request history are stored as entered, including authentication values such as bearer tokens, basic-auth passwords, API keys, tokens placed in environment variables or scripts, and sensitive values present in historical request headers or bodies. Environment values are displayed as plain text. IndexedDB is scoped by the browser origin, but FlexDoc does not encrypt these values or create an additional security boundary between persistence keys on the same origin. Only persist secrets on origins and devices you trust.
 
 Environment variables use `{{variable}}` placeholders. The active environment is resolved across request URLs, query parameters, headers, bodies, content types, methods, and common authentication fields at request-build time. Saved requests retain their raw templates, so switching environments does not rewrite collection data. Execution, `onRequestChange`, and code-generation consumers receive the resolved request while the editor continues to display the raw template.
 
@@ -72,6 +72,8 @@ function RequestWorkspace() {
 Create an environment in the workspace, add a `baseUrl` variable such as `https://api.example.com`, and select that environment before sending the templated request.
 
 Request scripts are trusted local JavaScript and are saved with collection requests. FlexDoc exposes its scripting API under the `flex` namespace. Pre-request scripts can read and mutate `flex.request`, use run-local `flex.variables`, and read/write the active `flex.environment`. Test scripts receive `flex.response`, `flex.test`, and a focused `flex.expect` assertion API. Script `console.log/info/warn/error` output is captured in the API Client result panel. Environment writes from scripts persist to the active environment; run-local variables do not.
+
+Sent requests are added to the workspace History panel. History records the actual resolved method and URL together with status, duration, or network error, while retaining the raw editable request template and scripts for replay. Replaying a history entry restores the raw request rather than baking environment substitutions or pre-request mutations back into the editor. The workspace keeps the latest 100 history entries; entries can be deleted individually or cleared together.
 
 FlexDoc request scripts are **not a security sandbox**. They execute JavaScript in the documentation page context and should only contain code you trust. Hosts with a Content Security Policy that blocks dynamic JavaScript evaluation may also block request scripts; the API Client surfaces that as a script error rather than sending the request. The initial scripting API intentionally covers a focused subset of common API-client scripting workflows; request chaining (`flex.sendRequest`), collection variables, cookies, and external package imports remain future work.
 
