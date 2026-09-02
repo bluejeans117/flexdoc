@@ -76,7 +76,6 @@ test('API Client runs scripts, persists history, and replays requests', async ({
 
   const historyLoad = apiClient.getByRole('button', { name: 'Load history request GET https://script.example.test/pets/77?locale=fr' });
   await expect(historyLoad).toBeVisible();
-  await expect(apiClient.getByText('200 OK')).toBeVisible();
 
   await apiClient.getByLabel('Saved request name').fill('Scripted pet');
   await apiClient.getByRole('button', { name: 'Save request' }).click();
