@@ -1,13 +1,15 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { ApiClient } from './ApiClient';
-import type { ApiClientProps } from './ApiClient';
+import type { ApiClientExecutionResult, ApiClientProps } from './ApiClient';
 import { ApiClientCollections } from './ApiClientCollections';
 import { ApiClientEnvironments } from './ApiClientEnvironments';
+import { ApiClientHistory } from './ApiClientHistory';
 import type { HttpRequestDraft } from '../utils/http-client';
 import type { ApiClientRequestScripts, ApiClientScriptEnvironmentChange } from '../utils/api-client-scripting';
 import type { BuiltRequest } from '../utils/request-builder';
 import {
   activeApiClientEnvironmentVariables,
+  addApiClientHistoryEntry,
   cloneRequestDraft,
   createApiClientId,
   createDefaultApiClientWorkspace,
@@ -83,6 +85,7 @@ export const ApiClientWorkspace: React.FC<ApiClientWorkspaceProps> = ({
   onRequestChange,
   onDraftChange,
   onScriptsChange,
+  onExecutionComplete,
   variables: externalVariables = {},
   environmentVariables: externalEnvironmentVariables = {},
   onEnvironmentChanges,
@@ -146,6 +149,11 @@ export const ApiClientWorkspace: React.FC<ApiClientWorkspaceProps> = ({
     onEnvironmentChanges?.(changes);
   };
 
+  const handleExecutionComplete = (result: ApiClientExecutionResult) => {
+    setWorkspace((current) => addApiClientHistoryEntry(current, result));
+    onExecutionComplete?.(result);
+  };
+
   const loadSavedRequest = (request: HttpRequestDraft, scripts?: ApiClientRequestScripts) => {
     const nextRequest = cloneRequestDraft(request);
     const nextScripts = cloneApiClientScripts(scripts);
@@ -171,6 +179,14 @@ export const ApiClientWorkspace: React.FC<ApiClientWorkspaceProps> = ({
           theme={theme}
         />
       </div>
+      <div className='border-t pt-4'>
+        <ApiClientHistory
+          workspace={workspace}
+          onWorkspaceChange={setWorkspace}
+          onLoadRequest={loadSavedRequest}
+          theme={theme}
+        />
+      </div>
     </aside>
     <ApiClient
       key={editorRevision}
@@ -183,6 +199,7 @@ export const ApiClientWorkspace: React.FC<ApiClientWorkspaceProps> = ({
       onEnvironmentChanges={handleEnvironmentChanges}
       onDraftChange={handleDraftChange}
       onScriptsChange={handleScriptsChange}
+      onExecutionComplete={handleExecutionComplete}
       onRequestChange={handleRequestChange}
     />
   </div>;
