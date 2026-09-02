@@ -2,7 +2,7 @@ import './styles.css';
 
 export { FlexDoc } from './components/FlexDoc';
 export { ApiClient } from './components/ApiClient';
-export type { ApiClientProps } from './components/ApiClient';
+export type { ApiClientExecutionResult, ApiClientProps } from './components/ApiClient';
 export { ApiClientWorkspace } from './components/ApiClientWorkspace';
 export type { ApiClientWorkspaceProps } from './components/ApiClientWorkspace';
 export { App as ApiDocsDemo } from './App';
@@ -32,6 +32,8 @@ export type {
   ApiClientEnvironment,
   ApiClientEnvironmentVariable,
   ApiClientFolder,
+  ApiClientHistoryEntry,
+  ApiClientHistoryInput,
   ApiClientSavedRequest,
   ApiClientWorkspaceState,
 } from './utils/api-client-workspace';
