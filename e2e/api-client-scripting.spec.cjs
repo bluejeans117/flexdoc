@@ -20,7 +20,7 @@ async function readApiClientWorkspace(page) {
   }), API_CLIENT_SPEC_TITLE);
 }
 
-test('API Client runs and persists pre-request scripts and response tests', async ({ page }, testInfo) => {
+test('API Client runs scripts, persists history, and replays requests', async ({ page }, testInfo) => {
   test.skip(testInfo.project.name !== 'chromium-desktop', 'desktop scripting coverage');
 
   const requests = [];
@@ -74,6 +74,10 @@ test('API Client runs and persists pre-request scripts and response tests', asyn
   expect(requests[0].url).toBe('https://script.example.test/pets/77?locale=fr');
   expect(requests[0].headers['x-script']).toBe('run-77');
 
+  const historyLoad = apiClient.getByRole('button', { name: 'Load history request GET https://script.example.test/pets/77?locale=fr' });
+  await expect(historyLoad).toBeVisible();
+  await expect(apiClient.getByText('200 OK')).toBeVisible();
+
   await apiClient.getByLabel('Saved request name').fill('Scripted pet');
   await apiClient.getByRole('button', { name: 'Save request' }).click();
   await expect(apiClient.getByRole('button', { name: 'Load saved request Scripted pet' })).toBeVisible();
@@ -83,18 +87,47 @@ test('API Client runs and persists pre-request scripts and response tests', asyn
     const saved = workspace?.requests?.find((request) => request.name === 'Scripted pet');
     const environment = workspace?.environments?.find((candidate) => candidate.id === workspace?.activeEnvironmentId);
     const values = Object.fromEntries((environment?.variables || []).map((variable) => [variable.key, variable.value]));
+    const history = workspace?.history?.[0];
     return {
       version: workspace?.version,
       preRequest: saved?.scripts?.preRequest,
       tests: saved?.scripts?.tests,
       lastRun: values.lastRun,
       lastPet: values.lastPet,
+      historyCount: workspace?.history?.length,
+      historyMethod: history?.executedMethod,
+      historyUrl: history?.resolvedUrl,
+      historyStatus: history?.status,
+      historyRequestUrl: history?.request?.url,
     };
-  }).toEqual({ version: 3, preRequest: preRequestScript, tests: testScript, lastRun: 'pre', lastPet: '77' });
+  }).toEqual({
+    version: 4,
+    preRequest: preRequestScript,
+    tests: testScript,
+    lastRun: 'pre',
+    lastPet: '77',
+    historyCount: 1,
+    historyMethod: 'GET',
+    historyUrl: 'https://script.example.test/pets/77?locale=fr',
+    historyStatus: 200,
+    historyRequestUrl: '{{baseUrl}}/pets/{{petId}}',
+  });
+
+  await apiClient.getByLabel('Request URL').fill('https://changed.example.test/ignored');
+  await apiClient.getByLabel('Pre-request script').fill('');
+  await apiClient.getByLabel('Tests script').fill('');
+  await historyLoad.click();
+  await expect(apiClient.getByLabel('Request URL')).toHaveValue('{{baseUrl}}/pets/{{petId}}');
+  await expect(apiClient.getByLabel('Pre-request script')).toHaveValue(preRequestScript);
+  await expect(apiClient.getByLabel('Tests script')).toHaveValue(testScript);
 
   await apiClient.getByLabel('Pre-request script').fill('');
   await apiClient.getByLabel('Tests script').fill('');
   await apiClient.getByRole('button', { name: 'Load saved request Scripted pet' }).click();
   await expect(apiClient.getByLabel('Pre-request script')).toHaveValue(preRequestScript);
   await expect(apiClient.getByLabel('Tests script')).toHaveValue(testScript);
+
+  await apiClient.getByRole('button', { name: 'Clear history' }).click();
+  await expect(historyLoad).toHaveCount(0);
+  await expect.poll(async () => (await readApiClientWorkspace(page))?.history?.length).toBe(0);
 });
