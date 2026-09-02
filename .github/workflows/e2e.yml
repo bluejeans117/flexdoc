@@ -28,6 +28,15 @@ jobs:
       - name: Build canonical standalone renderer
         run: npm run build:client
 
+      - name: Upload canonical renderer
+        uses: actions/upload-artifact@v7
+        with:
+          name: canonical-renderer
+          path: |
+            packages/client/dist/standalone/flexdoc.standalone.js
+            packages/client/dist/standalone/flexdoc.standalone.css
+          if-no-files-found: error
+
       - name: Install CLI dependencies using local Prauga client
         run: npm install --prefix tools/flexdoc-cli --no-save --package-lock=false --ignore-scripts --no-audit --no-fund "${{ github.workspace }}/packages/client" js-yaml@^4.1.0
 
