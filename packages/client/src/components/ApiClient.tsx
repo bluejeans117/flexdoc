@@ -9,6 +9,17 @@ import type { ApiClientRequestScripts, ApiClientScriptEnvironmentChange, ApiClie
 import type { BuiltRequest } from '../utils/request-builder';
 import type { Server } from '../types/openapi';
 
+export interface ApiClientExecutionResult {
+  request: HttpRequestDraft;
+  scripts: ApiClientRequestScripts;
+  executedMethod: string;
+  resolvedUrl: string;
+  status?: number;
+  statusText?: string;
+  responseTime?: number;
+  error?: string;
+}
+
 export interface ApiClientProps {
   initialRequest?: Partial<HttpRequestDraft>;
   initialScripts?: Partial<ApiClientRequestScripts>;
@@ -18,6 +29,7 @@ export interface ApiClientProps {
   onRequestChange?: (request: BuiltRequest) => void;
   onDraftChange?: (draft: HttpRequestDraft) => void;
   onScriptsChange?: (scripts: ApiClientRequestScripts) => void;
+  onExecutionComplete?: (result: ApiClientExecutionResult) => void;
   variables?: HttpVariables;
   environmentVariables?: HttpVariables;
   onEnvironmentChanges?: (changes: ApiClientScriptEnvironmentChange[]) => void;
@@ -77,6 +89,7 @@ export const ApiClient: React.FC<ApiClientProps> = ({
   onRequestChange,
   onDraftChange,
   onScriptsChange,
+  onExecutionComplete,
   variables = {},
   environmentVariables = {},
   onEnvironmentChanges,
@@ -147,6 +160,14 @@ export const ApiClient: React.FC<ApiClientProps> = ({
   };
 
   const execute = async () => {
+    const historyRequest = cloneDraft(draft);
+    const historyScripts = cloneApiClientScripts(scripts);
+    let executedMethod = '';
+    let resolvedUrl = '';
+    let startedAt = 0;
+    let requestAttempted = false;
+    let historyRecorded = false;
+
     setLoading(true);
     setError(null);
     setScriptError(null);
@@ -180,11 +201,15 @@ export const ApiClient: React.FC<ApiClientProps> = ({
       }
 
       const request = buildHttpRequest(executionDraft, { variables: executionVariables });
+      executedMethod = request.method;
+      resolvedUrl = request.url;
       onRequestChangeRef.current?.(request);
       let initWithUrl: RequestInit & { url: string } = { ...request.init, url: request.url, credentials };
       if (requestInterceptor) initWithUrl = await requestInterceptor(initWithUrl);
       const { url, ...init } = initWithUrl;
-      const startedAt = Date.now();
+      resolvedUrl = url;
+      startedAt = Date.now();
+      requestAttempted = true;
       const result = await fetch(url, init);
       const body = await result.text();
       const responseTime = Date.now() - startedAt;
@@ -195,6 +220,16 @@ export const ApiClient: React.FC<ApiClientProps> = ({
         headers: responseHeaders.map(([key, value]) => `${key}: ${value}`).join('\n'),
         body,
       });
+      onExecutionComplete?.({
+        request: historyRequest,
+        scripts: historyScripts,
+        executedMethod,
+        resolvedUrl,
+        status: result.status,
+        statusText: result.statusText,
+        responseTime,
+      });
+      historyRecorded = true;
 
       if (scripts.tests.trim()) {
         const testResult = await runApiClientScript({
@@ -218,7 +253,18 @@ export const ApiClient: React.FC<ApiClientProps> = ({
       }
       setScriptLogs(logs);
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : 'Request failed');
+      const message = cause instanceof Error ? cause.message : 'Request failed';
+      setError(message);
+      if (requestAttempted && !historyRecorded) {
+        onExecutionComplete?.({
+          request: historyRequest,
+          scripts: historyScripts,
+          executedMethod,
+          resolvedUrl,
+          responseTime: startedAt ? Date.now() - startedAt : undefined,
+          error: message,
+        });
+      }
     } finally { setLoading(false); }
   };
 
