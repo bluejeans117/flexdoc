@@ -6,7 +6,7 @@ on:
     branches: [main]
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   playwright:
@@ -15,8 +15,6 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v6
-        with:
-          ref: ${{ github.head_ref || github.ref_name }}
 
       - name: Setup Node.js
         uses: actions/setup-node@v6
@@ -29,28 +27,6 @@ jobs:
 
       - name: Build canonical standalone renderer
         run: npm run build:client
-
-      - name: Synchronize generated renderer assets
-        if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
-        run: |
-          npm run sync:adapter-assets
-          node scripts/verify-go-example-sum.mjs --write
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add adapters/go/assets adapters/python/src/prauga_flexdoc/_assets adapters/rust/assets examples/go-net-http/go.sum
-          if ! git diff --cached --quiet; then
-            git commit -m "chore: renderer: sync assets for API Client history"
-            git push origin HEAD:${{ github.head_ref }}
-          fi
-
-      - name: Upload canonical renderer
-        uses: actions/upload-artifact@v7
-        with:
-          name: canonical-renderer
-          path: |
-            packages/client/dist/standalone/flexdoc.standalone.js
-            packages/client/dist/standalone/flexdoc.standalone.css
-          if-no-files-found: error
 
       - name: Install CLI dependencies using local Prauga client
         run: npm install --prefix tools/flexdoc-cli --no-save --package-lock=false --ignore-scripts --no-audit --no-fund "${{ github.workspace }}/packages/client" js-yaml@^4.1.0
