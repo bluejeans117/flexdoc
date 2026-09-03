@@ -1,0 +1,76 @@
+name: .NET Adapter
+
+on:
+  pull_request:
+    paths:
+      - 'adapters/dotnet/**'
+      - 'examples/dotnet-aspnetcore/**'
+      - 'packages/client/**'
+      - '.github/workflows/dotnet.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'adapters/dotnet/**'
+      - 'examples/dotnet-aspnetcore/**'
+      - 'packages/client/**'
+      - '.github/workflows/dotnet.yml'
+
+concurrency:
+  group: dotnet-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  test-and-pack:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: '22.22.3'
+          cache: npm
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Install repository dependencies
+        run: npm ci
+
+      - name: Build canonical renderer
+        run: npm run build:client
+
+      - name: Build ASP.NET Core adapter
+        run: dotnet build adapters/dotnet/src/Prauga.FlexDoc.AspNetCore/Prauga.FlexDoc.AspNetCore.csproj --configuration Release --no-restore
+
+      - name: Pack NuGet release candidate
+        run: dotnet pack adapters/dotnet/src/Prauga.FlexDoc.AspNetCore/Prauga.FlexDoc.AspNetCore.csproj --configuration Release --no-build --output /tmp/flexdoc-dotnet
+
+      - name: Verify NuGet package metadata
+        run: |
+          test -s /tmp/flexdoc-dotnet/Prauga.FlexDoc.AspNetCore.0.1.0.nupkg
+          unzip -p /tmp/flexdoc-dotnet/Prauga.FlexDoc.AspNetCore.0.1.0.nupkg Prauga.FlexDoc.AspNetCore.nuspec | grep '<license type="expression">AGPL-3.0-or-later</license>'
+
+      - name: Build ASP.NET Core example
+        run: dotnet build examples/dotnet-aspnetcore/Prauga.FlexDoc.AspNetCore.Example.csproj --configuration Release
+
+      - name: Smoke test ASP.NET Core docs host
+        run: |
+          dotnet run --project examples/dotnet-aspnetcore/Prauga.FlexDoc.AspNetCore.Example.csproj --configuration Release --no-build --urls http://127.0.0.1:5087 >/tmp/flexdoc-dotnet-example.log 2>&1 &
+          APP_PID=$!
+          trap 'kill $APP_PID 2>/dev/null || true' EXIT
+          for i in $(seq 1 30); do
+            if curl --fail --silent http://127.0.0.1:5087/health >/dev/null; then break; fi
+            sleep 1
+          done
+          curl --fail --silent http://127.0.0.1:5087/docs | grep 'FlexDoc ASP.NET Core Example'
+          curl --fail --silent --output /tmp/flexdoc-dotnet-renderer.js http://127.0.0.1:5087/docs/__flexdoc/renderer.js
+          curl --fail --silent --output /tmp/flexdoc-dotnet-renderer.css http://127.0.0.1:5087/docs/__flexdoc/renderer.css
+          cmp /tmp/flexdoc-dotnet-renderer.js packages/client/dist/standalone/flexdoc.standalone.js
+          cmp /tmp/flexdoc-dotnet-renderer.css packages/client/dist/standalone/flexdoc.standalone.css
