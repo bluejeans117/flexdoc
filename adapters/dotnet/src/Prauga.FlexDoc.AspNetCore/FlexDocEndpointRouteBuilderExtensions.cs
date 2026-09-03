@@ -27,7 +27,6 @@ public static class FlexDocEndpointRouteBuilderExtensions
 
         var path = NormalizePath(options.Path);
         endpoints.MapGet(path, context => WriteHtml(context, options, path));
-        endpoints.MapGet(path + "/", context => WriteHtml(context, options, path));
 
         var group = endpoints.MapGroup(path);
         group.MapGet("/__flexdoc/renderer.js", context => WriteAsset(
