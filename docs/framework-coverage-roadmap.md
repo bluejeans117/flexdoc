@@ -6,12 +6,22 @@ FlexDoc keeps one canonical browser renderer and thin language/framework hosts. 
 
 | FlexDoc release | Coverage slice | Primary deliverables |
 | --- | --- | --- |
-| **2.2.5** | .NET | ASP.NET Core adapter, example, CI/package validation, NuGet-ready package |
-| **2.2.6** | JVM foundation | framework-neutral Java/Jakarta host; preserve Spring Boot starter; JAX-RS path for Jersey/RESTEasy; unlock Quarkus/Micronaut and Guice/Governator-style applications without coupling FlexDoc to DI containers |
+| **2.2.5** | .NET | ASP.NET Core adapter, example, CI/package validation, NuGet-ready package — implemented in #29 |
+| **2.2.6** | JVM foundation | framework-neutral Java host, Jakarta REST/JAX-RS transport, Spring Boot refactor, Quarkus and Micronaut runtime coverage, and Guice/Governator-style neutral-host path — in progress in #31 |
 | **2.2.7** | Python breadth | add WSGI support plus first-class Flask and Django integrations while retaining ASGI/FastAPI |
 | **2.2.8** | PHP | generic PHP host plus Laravel integration; Symfony compatibility/integration on the shared core |
 | **2.2.9** | Ruby | Rack adapter plus Rails integration; keep Sinatra/other Rack applications compatible |
 | **2.3.0** | Coverage completion | Rust Actix Web, Kotlin Ktor, Go Fiber, Elixir Plug/Phoenix, Hono integration/example, plus Go Gin/Chi/Echo and other lightweight framework examples/documentation |
+
+## 2.2.6 JVM design
+
+The Java family is coordinated at source version `0.4.0`:
+
+- `com.prauga.flexdoc:flexdoc-jvm` — Java 17+ framework-neutral host; owns the host HTML, cache policy, fingerprinting, and canonical renderer assets.
+- `com.prauga.flexdoc:flexdoc-jaxrs` — Jakarta REST/JAX-RS response transport over `flexdoc-jvm`.
+- `com.prauga.flexdoc:flexdoc-spring-boot-starter` — existing Spring Boot integration refactored to delegate renderer hosting to `flexdoc-jvm`.
+
+The coverage proof in #31 includes a Spring regression build, a Quarkus REST runtime test, a Micronaut runtime test, and a Guice/JDK HTTP smoke test. Governator-style services use the Guice path: bind `FlexDocHost` in the existing object graph and translate `FlexDocHttpResponse` through the service's HTTP stack.
 
 ## Architecture rule
 
@@ -20,7 +30,7 @@ Do not create a renderer implementation per framework. Each ecosystem should exp
 Prefer one framework-neutral package per language/runtime, then thin helpers:
 
 - **.NET:** ASP.NET Core endpoint routing is the native host boundary.
-- **JVM:** Java/Jakarta HTTP/Servlet/JAX-RS base, with Spring/Quarkus/Micronaut/Ktor helpers as needed. Guice and Governator are dependency-injection/lifecycle concerns rather than HTTP boundaries and should not require renderer forks.
+- **JVM:** `flexdoc-jvm` is the native host boundary. Spring Boot and Jakarta REST are transports; Quarkus consumes the Jakarta path; Micronaut and Guice/Governator-style services map the neutral response through their native HTTP stack. Ktor remains a 2.3.0 Kotlin proof path.
 - **Python:** one package supporting ASGI and WSGI, with FastAPI/Flask/Django helpers.
 - **PHP:** generic PHP package, then Laravel/Symfony integration sugar.
 - **Ruby:** Rack first, Rails helper second.
