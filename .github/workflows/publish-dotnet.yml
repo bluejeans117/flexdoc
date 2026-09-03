@@ -61,6 +61,9 @@ jobs:
         with:
           name: dotnet-dist
           path: dist
+      - uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: '8.0.x'
       - name: NuGet login
         uses: NuGet/login@v1
         id: login
