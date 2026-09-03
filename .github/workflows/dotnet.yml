@@ -54,23 +54,41 @@ jobs:
 
       - name: Verify NuGet package metadata
         run: |
-          test -s /tmp/flexdoc-dotnet/Prauga.FlexDoc.AspNetCore.0.1.0.nupkg
-          unzip -p /tmp/flexdoc-dotnet/Prauga.FlexDoc.AspNetCore.0.1.0.nupkg Prauga.FlexDoc.AspNetCore.nuspec | grep '<license type="expression">AGPL-3.0-or-later</license>'
+          PACKAGE=/tmp/flexdoc-dotnet/Prauga.FlexDoc.AspNetCore.0.1.0.nupkg
+          test -s "$PACKAGE"
+          unzip -p "$PACKAGE" Prauga.FlexDoc.AspNetCore.nuspec | grep '<license type="expression">AGPL-3.0-or-later</license>'
+          unzip -l "$PACKAGE" | grep 'README.md'
 
       - name: Build ASP.NET Core example
         run: dotnet build examples/dotnet-aspnetcore/Prauga.FlexDoc.AspNetCore.Example.csproj --configuration Release
 
       - name: Smoke test ASP.NET Core docs host
         run: |
-          dotnet run --project examples/dotnet-aspnetcore/Prauga.FlexDoc.AspNetCore.Example.csproj --configuration Release --no-build --urls http://127.0.0.1:5087 >/tmp/flexdoc-dotnet-example.log 2>&1 &
+          ASPNETCORE_URLS=http://127.0.0.1:5087 dotnet run --project examples/dotnet-aspnetcore/Prauga.FlexDoc.AspNetCore.Example.csproj --configuration Release --no-build >/tmp/flexdoc-dotnet-example.log 2>&1 &
           APP_PID=$!
           trap 'kill $APP_PID 2>/dev/null || true' EXIT
+
+          READY=0
           for i in $(seq 1 30); do
-            if curl --fail --silent http://127.0.0.1:5087/health >/dev/null; then break; fi
+            if curl --fail --silent http://127.0.0.1:5087/health >/dev/null; then
+              READY=1
+              break
+            fi
             sleep 1
           done
-          curl --fail --silent http://127.0.0.1:5087/docs | grep 'FlexDoc ASP.NET Core Example'
-          curl --fail --silent --output /tmp/flexdoc-dotnet-renderer.js http://127.0.0.1:5087/docs/__flexdoc/renderer.js
-          curl --fail --silent --output /tmp/flexdoc-dotnet-renderer.css http://127.0.0.1:5087/docs/__flexdoc/renderer.css
+          if [ "$READY" -ne 1 ]; then
+            echo 'ASP.NET Core example did not become ready:'
+            cat /tmp/flexdoc-dotnet-example.log
+            exit 1
+          fi
+
+          curl --fail --show-error --silent --output /tmp/flexdoc-dotnet-docs.html http://127.0.0.1:5087/docs
+          curl --fail --show-error --silent --output /tmp/flexdoc-dotnet-docs-slash.html http://127.0.0.1:5087/docs/
+          grep 'FlexDoc ASP.NET Core Example' /tmp/flexdoc-dotnet-docs.html
+          grep 'window.__FLEXDOC_SPEC_URL__="/openapi.json"' /tmp/flexdoc-dotnet-docs.html
+          grep 'FlexDoc ASP.NET Core Example' /tmp/flexdoc-dotnet-docs-slash.html
+
+          curl --fail --show-error --silent --output /tmp/flexdoc-dotnet-renderer.js http://127.0.0.1:5087/docs/__flexdoc/renderer.js
+          curl --fail --show-error --silent --output /tmp/flexdoc-dotnet-renderer.css http://127.0.0.1:5087/docs/__flexdoc/renderer.css
           cmp /tmp/flexdoc-dotnet-renderer.js packages/client/dist/standalone/flexdoc.standalone.js
           cmp /tmp/flexdoc-dotnet-renderer.css packages/client/dist/standalone/flexdoc.standalone.css
