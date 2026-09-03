@@ -69,9 +69,17 @@ public static class FlexDocEndpointRouteBuilderExtensions
         var specUrl = JsonSerializer.Serialize(options.SpecUrl);
         var serializedOptions = JsonSerializer.Serialize(rendererOptions);
         var title = HtmlEncoder.Default.Encode(options.Title);
+        var assetPath = HtmlEncoder.Default.Encode(path);
         var version = RendererAssets.Fingerprint;
 
-        return $$"""<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><title>{{title}}</title><link rel="stylesheet" href="{{path}}/__flexdoc/renderer.css?v={{version}}"></head><body><div id="flexdoc-root"></div><script>window.__FLEXDOC_SPEC_URL__={{specUrl}};window.__FLEXDOC_OPTIONS__={{serializedOptions}};</script><script src="{{path}}/__flexdoc/renderer.js?v={{version}}"></script><script>(async function(){const root=document.getElementById('flexdoc-root');try{const baseUri=new URL(window.__FLEXDOC_SPEC_URL__,window.location.href).toString();const response=await fetch(baseUri);if(!response.ok)throw new Error('Unable to load OpenAPI specification: HTTP '+response.status);const spec=await response.json();const config={spec:spec,options:window.__FLEXDOC_OPTIONS__||{},baseUri:baseUri};if(window.FlexDocStandalone.mountAsync)await window.FlexDocStandalone.mountAsync(root,config);else window.FlexDocStandalone.mount(root,config);}catch(error){root.textContent=error instanceof Error?error.message:String(error);}})();</script></body></html>""";
+        const string template = """<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><title>__FLEXDOC_TITLE__</title><link rel="stylesheet" href="__FLEXDOC_PATH__/__flexdoc/renderer.css?v=__FLEXDOC_VERSION__"></head><body><div id="flexdoc-root"></div><script>window.__FLEXDOC_SPEC_URL__=__FLEXDOC_SPEC_URL__;window.__FLEXDOC_OPTIONS__=__FLEXDOC_OPTIONS__;</script><script src="__FLEXDOC_PATH__/__flexdoc/renderer.js?v=__FLEXDOC_VERSION__"></script><script>(async function(){const root=document.getElementById('flexdoc-root');try{const baseUri=new URL(window.__FLEXDOC_SPEC_URL__,window.location.href).toString();const response=await fetch(baseUri);if(!response.ok)throw new Error('Unable to load OpenAPI specification: HTTP '+response.status);const spec=await response.json();const config={spec:spec,options:window.__FLEXDOC_OPTIONS__||{},baseUri:baseUri};if(window.FlexDocStandalone.mountAsync)await window.FlexDocStandalone.mountAsync(root,config);else window.FlexDocStandalone.mount(root,config);}catch(error){root.textContent=error instanceof Error?error.message:String(error);}})();</script></body></html>""";
+
+        return template
+            .Replace("__FLEXDOC_TITLE__", title, StringComparison.Ordinal)
+            .Replace("__FLEXDOC_PATH__", assetPath, StringComparison.Ordinal)
+            .Replace("__FLEXDOC_VERSION__", version, StringComparison.Ordinal)
+            .Replace("__FLEXDOC_SPEC_URL__", specUrl, StringComparison.Ordinal)
+            .Replace("__FLEXDOC_OPTIONS__", serializedOptions, StringComparison.Ordinal);
     }
 
     private static string NormalizePath(string path)
