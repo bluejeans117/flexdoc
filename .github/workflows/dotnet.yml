@@ -7,6 +7,7 @@ on:
       - 'examples/dotnet-aspnetcore/**'
       - 'packages/client/**'
       - '.github/workflows/dotnet.yml'
+      - '.github/workflows/publish-dotnet.yml'
   push:
     branches: [main]
     paths:
@@ -14,6 +15,7 @@ on:
       - 'examples/dotnet-aspnetcore/**'
       - 'packages/client/**'
       - '.github/workflows/dotnet.yml'
+      - '.github/workflows/publish-dotnet.yml'
 
 concurrency:
   group: dotnet-${{ github.workflow }}-${{ github.ref }}
