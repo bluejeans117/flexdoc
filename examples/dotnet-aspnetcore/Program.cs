@@ -7,9 +7,9 @@ app.MapGet("/openapi.json", () => Results.Json(new
 {
     openapi = "3.0.3",
     info = new { title = "FlexDoc ASP.NET Core Example", version = "1.0.0" },
-    paths = new
+    paths = new Dictionary<string, object>
     {
-        health = new
+        ["/health"] = new
         {
             get = new
             {
