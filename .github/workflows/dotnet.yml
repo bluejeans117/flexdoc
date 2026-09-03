@@ -47,7 +47,7 @@ jobs:
         run: npm run build:client
 
       - name: Build ASP.NET Core adapter
-        run: dotnet build adapters/dotnet/src/Prauga.FlexDoc.AspNetCore/Prauga.FlexDoc.AspNetCore.csproj --configuration Release --no-restore
+        run: dotnet build adapters/dotnet/src/Prauga.FlexDoc.AspNetCore/Prauga.FlexDoc.AspNetCore.csproj --configuration Release
 
       - name: Pack NuGet release candidate
         run: dotnet pack adapters/dotnet/src/Prauga.FlexDoc.AspNetCore/Prauga.FlexDoc.AspNetCore.csproj --configuration Release --no-build --output /tmp/flexdoc-dotnet
