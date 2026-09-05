@@ -21,6 +21,8 @@ export { createOpenApiApiClientSession } from './utils/openapi-api-client-sessio
 export type { OpenApiApiClientSession } from './utils/openapi-api-client-session';
 export { buildHttpRequest, requestDraftFromBuiltRequest, resolveHttpRequestDraftVariables } from './utils/http-client';
 export { executeApiClientRequest } from './utils/api-client-execution';
+export { apiClientCollectionRunRequests, runApiClientCollection } from './utils/api-client-runner';
+export type { ApiClientCollectionRunItem, ApiClientCollectionRunResult, RunApiClientCollectionOptions } from './utils/api-client-runner';
 export type { ApiClientExecutionOutcome, ApiClientExecutionResponse, ExecuteApiClientRequestOptions } from './utils/api-client-execution';
 export type { HttpAuth, HttpKeyValue, HttpRequestBuildOptions, HttpRequestDraft, HttpVariables } from './utils/http-client';
 export { cloneApiClientScripts, EMPTY_API_CLIENT_SCRIPTS, runApiClientScript } from './utils/api-client-scripting';
