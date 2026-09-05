@@ -1,0 +1,64 @@
+name: Temporary 2.9 Native Scripting IntelliSense
+
+on:
+  push:
+    branches:
+      - tmp/prepare-2.9-script-intellisense-native
+
+permissions:
+  contents: write
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out branch
+        uses: actions/checkout@v6
+        with:
+          ref: tmp/prepare-2.9-script-intellisense-native
+          fetch-depth: 0
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: '22.22.3'
+          cache: npm
+
+      - name: Remove editor framework dependencies
+        run: npm uninstall --package-lock-only --ignore-scripts --no-audit --no-fund -w packages/client @codemirror/autocomplete @codemirror/view codemirror @codemirror/lang-javascript
+
+      - name: Install full repository dependencies
+        run: npm ci --ignore-scripts --no-audit --no-fund
+
+      - name: Wire native smart script editor
+        run: python .github/scripts/tmp-wire-2.9-script-intellisense-native.py
+
+      - name: Validate diff
+        run: |
+          git diff --check
+          git status --short
+
+      - name: Build core
+        run: npm run build:core
+
+      - name: Lint client
+        run: npm run lint -w packages/client
+
+      - name: Test client
+        run: npm run test -w packages/client -- --runInBand
+
+      - name: Build client library and standalone
+        run: npm run build -w packages/client
+
+      - name: Commit validated product source
+        run: |
+          git config user.name 'Vishnu R'
+          git config user.email '45818225+bluejeans117@users.noreply.github.com'
+          git add package-lock.json packages/client/package.json packages/client/src/components/ApiClient.tsx packages/client/src/components/ApiClientScriptEditor.tsx packages/client/src/index.ts packages/client/src/utils/api-client-script-intellisense.ts packages/client/src/utils/api-client-script-intellisense.test.ts
+          git diff --cached --check
+          if git diff --cached --quiet; then
+            echo 'Validated product tree already committed.'
+          else
+            git commit -m 'feat: api-client/2.9: add scripting intellisense' -m 'Replace plain script textareas with a dependency-free smart editor and phase-aware FlexDoc IntelliSense. Provide dot-triggered and Ctrl+Space completion, keyboard selection, signatures, documentation, assertion-chain help, and known variable names while keeping the catalogue covered against the scripting runtime.'
+            git push origin HEAD:tmp/prepare-2.9-script-intellisense-native
+          fi
