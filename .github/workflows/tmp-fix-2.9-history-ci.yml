@@ -1,0 +1,89 @@
+name: Temporary 2.9 History CI Repair
+
+on:
+  push:
+    branches:
+      - tmp/fix-2.9-history-ci
+    paths:
+      - .github/workflows/tmp-fix-2.9-history-ci.yml
+
+permissions:
+  contents: write
+
+jobs:
+  validate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - name: Check out branch
+        uses: actions/checkout@v6
+        with:
+          ref: tmp/fix-2.9-history-ci
+          fetch-depth: 0
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 22.22.3
+          cache: npm
+
+      - name: Install repository dependencies
+        run: npm ci --ignore-scripts --no-audit --no-fund
+
+      - name: Apply history CI repair
+        run: python .github/scripts/tmp-fix-2.9-history-ci.py
+
+      - name: Validate source diff
+        run: git diff --check
+
+      - name: Lint client
+        run: npm run lint -w packages/client
+
+      - name: Test client
+        run: npm run test -w packages/client -- --runInBand
+
+      - name: Build canonical renderer
+        run: npm run build:client
+
+      - name: Synchronize adapter renderer assets
+        run: |
+          npm run sync:adapter-assets
+          npm run check:adapter-assets
+          git diff --check
+
+      - name: Install pinned Playwright runner
+        run: npm install --no-save --package-lock=false @playwright/test@1.62.1
+
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Run full renderer browser suite
+        run: npx playwright test
+
+      - name: Commit validated product changes
+        run: |
+          git config user.name 'Vishnu R'
+          git config user.email '45818225+bluejeans117@users.noreply.github.com'
+          git add \
+            packages/client/src/components/ApiClientHistoryPage.tsx \
+            packages/client/src/components/ApiClientHistoryPage.test.tsx \
+            packages/client/src/utils/api-client-history.ts \
+            e2e/api-client-collection-variables.spec.cjs \
+            e2e/api-client-scripting.spec.cjs \
+            adapters/go/assets/flexdoc.standalone.js \
+            adapters/go/assets/flexdoc.standalone.css \
+            adapters/python/src/prauga_flexdoc/_assets/flexdoc.standalone.js \
+            adapters/python/src/prauga_flexdoc/_assets/flexdoc.standalone.css \
+            adapters/rust/assets/flexdoc.standalone.js \
+            adapters/rust/assets/flexdoc.standalone.css \
+            adapters/php/assets/flexdoc.standalone.js \
+            adapters/php/assets/flexdoc.standalone.css \
+            adapters/ruby/assets/flexdoc.standalone.js \
+            adapters/ruby/assets/flexdoc.standalone.css \
+            adapters/rust-actix/assets/flexdoc.standalone.js \
+            adapters/rust-actix/assets/flexdoc.standalone.css \
+            adapters/elixir/assets/flexdoc.standalone.js \
+            adapters/elixir/assets/flexdoc.standalone.css
+          git diff --cached --check
+          git commit -m 'fix: api-client/2.9: align history CI and renderer assets' -m 'Preserve deleted collection and folder provenance in the full history view, update legacy browser coverage to use the full history workflow, and synchronize adapter renderer copies with the canonical 2.9 standalone build.'
+          git push origin HEAD:tmp/fix-2.9-history-ci
