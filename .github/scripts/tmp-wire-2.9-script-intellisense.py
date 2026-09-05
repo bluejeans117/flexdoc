@@ -49,6 +49,18 @@ smart_grid = """        <div className='grid gap-3 xl:grid-cols-2'>
 api = api[:start] + smart_grid + api[end:]
 api_path.write_text(api)
 
+editor_path = Path('packages/client/src/components/ApiClientScriptEditor.tsx')
+editor = editor_path.read_text()
+editor = editor.replace(
+    "function variableKeyCompletion(\n  textBeforeCursor: string,\n  keys: ApiClientScriptVariableKeys,\n): { scope: keyof ApiClientScriptVariableKeys; prefix: string } | null {",
+    "function variableKeyCompletion(\n  textBeforeCursor: string,\n): { scope: keyof ApiClientScriptVariableKeys; prefix: string } | null {",
+)
+editor = editor.replace(
+    "const variable = variableKeyCompletion(textBeforeCursor, variableKeys);",
+    "const variable = variableKeyCompletion(textBeforeCursor);",
+)
+editor_path.write_text(editor)
+
 index_path = Path('packages/client/src/index.ts')
 index = index_path.read_text()
 component_marker = "export type { ApiClientExecutionResult, ApiClientProps } from './components/ApiClient';\n"
