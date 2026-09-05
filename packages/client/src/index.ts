@@ -3,6 +3,8 @@ import './styles.css';
 export { FlexDoc } from './components/FlexDoc';
 export { ApiClient } from './components/ApiClient';
 export type { ApiClientExecutionResult, ApiClientProps } from './components/ApiClient';
+export { ApiClientScriptEditor } from './components/ApiClientScriptEditor';
+export type { ApiClientScriptEditorProps } from './components/ApiClientScriptEditor';
 export { ApiClientWorkspace } from './components/ApiClientWorkspace';
 export type { ApiClientWorkspaceProps } from './components/ApiClientWorkspace';
 export { App as ApiDocsDemo } from './App';
@@ -26,6 +28,8 @@ export type { ApiClientCollectionRunItem, ApiClientCollectionRunResult, RunApiCl
 export type { ApiClientExecutionOutcome, ApiClientExecutionResponse, ExecuteApiClientRequestOptions } from './utils/api-client-execution';
 export type { HttpAuth, HttpKeyValue, HttpRequestBuildOptions, HttpRequestDraft, HttpVariables } from './utils/http-client';
 export { cloneApiClientScripts, EMPTY_API_CLIENT_SCRIPTS, runApiClientScript } from './utils/api-client-scripting';
+export { API_CLIENT_SCRIPT_COMPLETION_PATHS, apiClientScriptMemberCompletions, apiClientScriptVariableKeyCompletions } from './utils/api-client-script-intellisense';
+export type { ApiClientScriptCompletionItem, ApiClientScriptCompletionKind, ApiClientScriptPhase, ApiClientScriptVariableKeys } from './utils/api-client-script-intellisense';
 export type {
   ApiClientRequestScripts,
   ApiClientScriptEnvironmentChange,

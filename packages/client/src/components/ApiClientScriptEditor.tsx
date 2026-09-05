@@ -55,7 +55,6 @@ function assertionCompletion(textBeforeCursor: string, phase: ApiClientScriptPha
 
 function variableKeyCompletion(
   textBeforeCursor: string,
-  keys: ApiClientScriptVariableKeys,
 ): { scope: keyof ApiClientScriptVariableKeys; prefix: string } | null {
   const match = textBeforeCursor.match(/flex\.(environment|collection|variables)\.(?:get|has|set|unset)\(\s*['"]([^'"]*)$/);
   if (!match) return null;
@@ -65,7 +64,7 @@ function variableKeyCompletion(
 function createCompletionSource(phase: ApiClientScriptPhase, variableKeys: ApiClientScriptVariableKeys) {
   return (context: CompletionContext): CompletionResult | null => {
     const textBeforeCursor = context.state.sliceDoc(0, context.pos);
-    const variable = variableKeyCompletion(textBeforeCursor, variableKeys);
+    const variable = variableKeyCompletion(textBeforeCursor);
     if (variable) {
       const options = apiClientScriptVariableKeyCompletions(variable.scope, variable.prefix, variableKeys).map(toCompletion);
       return options.length > 0 ? { from: context.pos - variable.prefix.length, options, validFor: /^[\w.-]*$/ } : null;
