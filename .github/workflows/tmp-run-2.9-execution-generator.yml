@@ -1,0 +1,86 @@
+name: Temporary Validate 2.9 Execution Source
+
+on:
+  push:
+    branches:
+      - tmp/prepare-2.9-execution-engine
+
+permissions:
+  contents: write
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out branch
+        uses: actions/checkout@v6
+        with:
+          ref: tmp/prepare-2.9-execution-engine
+          fetch-depth: 0
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: '22.22.3'
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci --ignore-scripts --no-audit --no-fund
+
+      - name: Reuse execution generator
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          workflow = Path('.github/workflows/tmp-prepare-2.9-execution-engine.yml').read_text()
+          marker = '      - name: Extract shared execution engine\n        run: |\n'
+          start = workflow.index(marker) + len(marker)
+          end = workflow.index('\n      - name: Validate focused diff', start)
+          lines = workflow[start:end].splitlines()
+          script = '\n'.join(line[10:] if line.startswith('          ') else line for line in lines) + '\n'
+          Path('/tmp/generate-execution.sh').write_text(script)
+          PY
+          bash /tmp/generate-execution.sh
+
+      - name: Validate focused source diff
+        run: |
+          git add -N packages/client/src/utils/api-client-execution.ts packages/client/src/utils/api-client-execution.test.ts
+          git diff --check
+          changed=$(git diff --name-only)
+          printf '%s\n' "$changed"
+          if [ -n "$changed" ]; then
+            unexpected=$(printf '%s\n' "$changed" | grep -Ev '^(packages/client/src/components/ApiClient\.tsx|packages/client/src/index\.ts|packages/client/src/utils/api-client-execution\.ts|packages/client/src/utils/api-client-execution\.test\.ts)$' || true)
+            if [ -n "$unexpected" ]; then
+              echo "Unexpected changed files:"
+              echo "$unexpected"
+              exit 1
+            fi
+            test "$(printf '%s\n' "$changed" | sed '/^$/d' | wc -l)" -eq 4
+          fi
+
+      - name: Build core
+        run: npm run build:core
+
+      - name: Lint client
+        run: npm run lint -w packages/client
+
+      - name: Test client
+        run: npm run test -w packages/client -- --runInBand
+
+      - name: Build client
+        run: npm run build -w packages/client
+
+      - name: Commit validated source changes
+        run: |
+          git add packages/client/src/components/ApiClient.tsx \
+                  packages/client/src/index.ts \
+                  packages/client/src/utils/api-client-execution.ts \
+                  packages/client/src/utils/api-client-execution.test.ts
+          if git diff --cached --quiet; then
+            echo 'Validated source already committed.'
+            exit 0
+          fi
+          git config user.name 'Vishnu R'
+          git config user.email '45818225+bluejeans117@users.noreply.github.com'
+          git commit -m 'feat: api-client/2.9: extract shared request execution' \
+            -m 'Move request execution, scripting, auth resolution, interception, fetch timing, response tests, and mutation reporting into a reusable API Client execution utility. Keep the existing ApiClient UI behavior by delegating Send through the shared engine and expose the executor for the upcoming collection runner.'
+          git push origin HEAD:tmp/prepare-2.9-execution-engine
