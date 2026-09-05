@@ -1,6 +1,6 @@
 import type { HttpAuth, HttpKeyValue, HttpRequestDraft } from './http-client';
 import { cloneApiClientScripts } from './api-client-scripting';
-import type { ApiClientRequestScripts, ApiClientScriptTestResult } from './api-client-scripting';
+import type { ApiClientRequestScripts, ApiClientScriptCollectionChange, ApiClientScriptEnvironmentChange, ApiClientScriptTestResult } from './api-client-scripting';
 
 export interface ApiClientEnvironmentVariable {
   id: string;
@@ -475,6 +475,92 @@ export function apiClientCollectionVariables(workspace: ApiClientWorkspaceState,
 export function activeApiClientEnvironmentVariables(workspace: ApiClientWorkspaceState): Record<string, string> {
   const environment = workspace.environments.find((candidate) => candidate.id === workspace.activeEnvironmentId);
   return variableMap(environment?.variables || []);
+}
+
+
+export function applyApiClientEnvironmentChanges(
+  workspace: ApiClientWorkspaceState,
+  changes: ApiClientScriptEnvironmentChange[],
+): ApiClientWorkspaceState {
+  if (!workspace.activeEnvironmentId || changes.length === 0) return workspace;
+  const environmentIndex = workspace.environments.findIndex((environment) => environment.id === workspace.activeEnvironmentId);
+  if (environmentIndex < 0) return workspace;
+
+  const environment = workspace.environments[environmentIndex];
+  let variables = environment.variables.map((variable) => ({ ...variable }));
+  let changed = false;
+  for (const change of changes) {
+    const key = change.key.trim();
+    if (!key) continue;
+    if (change.action === 'unset') {
+      const next = variables.filter((variable) => variable.key.trim() !== key);
+      if (next.length !== variables.length) {
+        variables = next;
+        changed = true;
+      }
+      continue;
+    }
+    const indexes = variables
+      .map((variable, index) => variable.key.trim() === key ? index : -1)
+      .filter((index) => index >= 0);
+    const value = change.value || '';
+    if (indexes.length > 0) {
+      const first = indexes[0];
+      variables[first] = { ...variables[first], key, value, enabled: true };
+      if (indexes.length > 1) variables = variables.filter((variable, index) => index === first || variable.key.trim() !== key);
+    } else {
+      variables.push({ id: createApiClientId('variable'), key, value, enabled: true });
+    }
+    changed = true;
+  }
+  if (!changed) return workspace;
+  const environments = workspace.environments.map((candidate, index) => index === environmentIndex
+    ? { ...candidate, variables, updatedAt: now() }
+    : candidate);
+  return { ...workspace, environments };
+}
+
+export function applyApiClientCollectionChanges(
+  workspace: ApiClientWorkspaceState,
+  collectionId: string | undefined,
+  changes: ApiClientScriptCollectionChange[],
+): ApiClientWorkspaceState {
+  if (!collectionId || changes.length === 0) return workspace;
+  const collectionIndex = workspace.collections.findIndex((collection) => collection.id === collectionId);
+  if (collectionIndex < 0) return workspace;
+
+  const collection = workspace.collections[collectionIndex];
+  let variables = collection.variables.map((variable) => ({ ...variable }));
+  let changed = false;
+  for (const change of changes) {
+    const key = change.key.trim();
+    if (!key) continue;
+    if (change.action === 'unset') {
+      const next = variables.filter((variable) => variable.key.trim() !== key);
+      if (next.length !== variables.length) {
+        variables = next;
+        changed = true;
+      }
+      continue;
+    }
+    const indexes = variables
+      .map((variable, index) => variable.key.trim() === key ? index : -1)
+      .filter((index) => index >= 0);
+    const value = change.value || '';
+    if (indexes.length > 0) {
+      const first = indexes[0];
+      variables[first] = { ...variables[first], key, value, enabled: true };
+      if (indexes.length > 1) variables = variables.filter((variable, index) => index === first || variable.key.trim() !== key);
+    } else {
+      variables.push({ id: createApiClientId('variable'), key, value, enabled: true });
+    }
+    changed = true;
+  }
+  if (!changed) return workspace;
+  const collections = workspace.collections.map((candidate, index) => index === collectionIndex
+    ? { ...candidate, variables, updatedAt: now() }
+    : candidate);
+  return { ...workspace, collections };
 }
 
 export function deleteApiClientEnvironment(workspace: ApiClientWorkspaceState, environmentId: string): ApiClientWorkspaceState {
