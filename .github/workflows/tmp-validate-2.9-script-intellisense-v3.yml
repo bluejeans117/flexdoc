@@ -1,0 +1,61 @@
+name: Temporary 2.9 Scripting IntelliSense v3
+
+on:
+  push:
+    branches:
+      - tmp/prepare-2.9-script-intellisense
+
+permissions:
+  contents: write
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out branch
+        uses: actions/checkout@v6
+        with:
+          ref: tmp/prepare-2.9-script-intellisense
+          fetch-depth: 0
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: '22.22.3'
+          cache: npm
+
+      - name: Install CodeMirror scripting dependencies
+        run: npm install --ignore-scripts --no-audit --no-fund -w packages/client --save-exact codemirror@6.0.2 @codemirror/autocomplete@6.20.3 @codemirror/lang-javascript@6.2.5
+
+      - name: Wire smart script editors
+        run: python .github/scripts/tmp-wire-2.9-script-intellisense.py
+
+      - name: Validate diff
+        run: |
+          git diff --check
+          git status --short
+
+      - name: Build core
+        run: npm run build:core
+
+      - name: Lint client
+        run: npm run lint -w packages/client
+
+      - name: Test client
+        run: npm run test -w packages/client -- --runInBand
+
+      - name: Build client
+        run: npm run build -w packages/client
+
+      - name: Commit validated product source
+        run: |
+          git config user.name 'Vishnu R'
+          git config user.email '45818225+bluejeans117@users.noreply.github.com'
+          git add package-lock.json packages/client/package.json packages/client/src/components/ApiClient.tsx packages/client/src/components/ApiClientScriptEditor.tsx packages/client/src/index.ts packages/client/src/utils/api-client-script-intellisense.ts packages/client/src/utils/api-client-script-intellisense.test.ts
+          git diff --cached --check
+          if git diff --cached --quiet; then
+            echo 'Validated product tree already committed.'
+          else
+            git commit -m 'feat: api-client/2.9: add scripting intellisense' -m 'Replace plain script textareas with a CodeMirror JavaScript editor and phase-aware FlexDoc IntelliSense. Suggest the real flex scripting API, signatures, documentation, assertion chains, console helpers, and known variable keys while keeping the completion catalogue covered against the runtime.'
+            git push origin HEAD:tmp/prepare-2.9-script-intellisense
+          fi
