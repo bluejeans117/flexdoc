@@ -1,0 +1,491 @@
+name: Temporary 2.9 Execution Engine Extraction
+
+on:
+  push:
+    branches:
+      - tmp/prepare-2.9-execution-engine
+
+permissions:
+  contents: write
+
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out branch
+        uses: actions/checkout@v6
+        with:
+          ref: tmp/prepare-2.9-execution-engine
+          fetch-depth: 0
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: '22.22.3'
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci --ignore-scripts --no-audit --no-fund
+
+      - name: Extract shared execution engine
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          execution = r'''import { buildHttpRequest } from './http-client';
+          import { cloneApiClientScripts, runApiClientScript } from './api-client-scripting';
+          import type { HttpAuth, HttpRequestDraft, HttpVariables } from './http-client';
+          import type {
+            ApiClientRequestScripts,
+            ApiClientScriptCollectionChange,
+            ApiClientScriptEnvironmentChange,
+            ApiClientScriptTestResult,
+          } from './api-client-scripting';
+          import type { BuiltRequest } from './request-builder';
+
+          export interface ApiClientExecutionResult {
+            request: HttpRequestDraft;
+            scripts: ApiClientRequestScripts;
+            executedMethod: string;
+            resolvedUrl: string;
+            status?: number;
+            statusText?: string;
+            responseTime?: number;
+            error?: string;
+            scriptTests?: ApiClientScriptTestResult[];
+            scriptLogs?: string[];
+            scriptError?: string;
+          }
+
+          export interface ApiClientExecutionResponse {
+            status: number;
+            statusText: string;
+            headers: Array<[string, string]>;
+            body: string;
+            responseTime: number;
+          }
+
+          export interface ApiClientExecutionOutcome {
+            result?: ApiClientExecutionResult;
+            response?: ApiClientExecutionResponse;
+            error?: string;
+            scriptError?: string;
+            scriptTests: ApiClientScriptTestResult[];
+            scriptLogs: string[];
+          }
+
+          export interface ExecuteApiClientRequestOptions {
+            request: HttpRequestDraft;
+            scripts?: Partial<ApiClientRequestScripts>;
+            credentials?: RequestCredentials;
+            requestInterceptor?: (request: RequestInit & { url: string }) => RequestInit & { url: string } | Promise<RequestInit & { url: string }>;
+            resolveAuth?: (auth: HttpAuth | undefined) => HttpAuth;
+            variables?: HttpVariables;
+            collectionVariables?: HttpVariables;
+            externalVariables?: HttpVariables;
+            environmentVariables?: HttpVariables;
+            onRequestBuilt?: (request: BuiltRequest) => void;
+            onCollectionChanges?: (changes: ApiClientScriptCollectionChange[]) => void;
+            onEnvironmentChanges?: (changes: ApiClientScriptEnvironmentChange[]) => void;
+            fetcher?: typeof globalThis.fetch;
+            now?: () => number;
+          }
+
+          function cloneDraft(draft: HttpRequestDraft): HttpRequestDraft {
+            const auth = draft.auth
+              ? draft.auth.type === 'oauth2'
+                ? { ...draft.auth, scopes: draft.auth.scopes ? [...draft.auth.scopes] : undefined }
+                : { ...draft.auth }
+              : undefined;
+            return {
+              ...draft,
+              query: draft.query?.map((entry) => ({ ...entry })),
+              headers: draft.headers?.map((entry) => ({ ...entry })),
+              auth,
+            };
+          }
+
+          function safeVariables(values: HttpVariables | undefined): HttpVariables {
+            return Object.assign(Object.create(null) as HttpVariables, values || {});
+          }
+
+          function messageFor(cause: unknown): string {
+            return cause instanceof Error ? cause.message : 'Request failed';
+          }
+
+          export async function executeApiClientRequest(options: ExecuteApiClientRequestOptions): Promise<ApiClientExecutionOutcome> {
+            const historyRequest = cloneDraft(options.request);
+            const scripts = cloneApiClientScripts(options.scripts);
+            const fetcher = options.fetcher || globalThis.fetch;
+            const now = options.now || Date.now;
+            let executionDraft = cloneDraft(options.request);
+            let executionVariables = safeVariables(options.variables);
+            let executionCollectionVariables = safeVariables(options.collectionVariables);
+            const executionExternalVariables = safeVariables(options.externalVariables);
+            let executionEnvironmentVariables = safeVariables(options.environmentVariables);
+            let logs: string[] = [];
+            let scriptTests: ApiClientScriptTestResult[] = [];
+            let scriptError: string | undefined;
+            let executedMethod = '';
+            let resolvedUrl = '';
+            let startedAt = 0;
+            let requestAttempted = false;
+
+            try {
+              if (scripts.preRequest.trim()) {
+                const preRequestResult = await runApiClientScript({
+                  script: scripts.preRequest,
+                  phase: 'pre-request',
+                  draft: executionDraft,
+                  variables: executionVariables,
+                  collectionVariables: executionCollectionVariables,
+                  externalVariables: executionExternalVariables,
+                  environmentVariables: executionEnvironmentVariables,
+                });
+                executionDraft = preRequestResult.draft;
+                executionVariables = preRequestResult.variables;
+                executionCollectionVariables = preRequestResult.collectionVariables;
+                executionEnvironmentVariables = preRequestResult.environmentVariables;
+                logs = [...logs, ...preRequestResult.logs];
+                if (preRequestResult.collectionChanges.length > 0) options.onCollectionChanges?.(preRequestResult.collectionChanges);
+                if (preRequestResult.environmentChanges.length > 0) options.onEnvironmentChanges?.(preRequestResult.environmentChanges);
+                if (preRequestResult.error) {
+                  return {
+                    scriptTests,
+                    scriptLogs: logs,
+                    scriptError: `Pre-request script: ${preRequestResult.error}`,
+                  };
+                }
+              }
+
+              if (options.resolveAuth) executionDraft = { ...executionDraft, auth: options.resolveAuth(executionDraft.auth) };
+              const request = buildHttpRequest(executionDraft, { variables: executionVariables });
+              executedMethod = request.method;
+              resolvedUrl = request.url;
+              options.onRequestBuilt?.(request);
+
+              let initWithUrl: RequestInit & { url: string } = {
+                ...request.init,
+                url: request.url,
+                credentials: options.credentials || 'same-origin',
+              };
+              if (options.requestInterceptor) initWithUrl = await options.requestInterceptor(initWithUrl);
+              const { url, ...init } = initWithUrl;
+              resolvedUrl = url;
+              startedAt = now();
+              requestAttempted = true;
+              if (!fetcher) throw new Error('Fetch API is not available');
+              const response = await fetcher(url, init);
+              const body = await response.text();
+              const responseTime = now() - startedAt;
+              const responseHeaders = [...response.headers.entries()];
+
+              if (scripts.tests.trim()) {
+                const testResult = await runApiClientScript({
+                  script: scripts.tests,
+                  phase: 'tests',
+                  draft: executionDraft,
+                  variables: executionVariables,
+                  collectionVariables: executionCollectionVariables,
+                  externalVariables: executionExternalVariables,
+                  environmentVariables: executionEnvironmentVariables,
+                  response: {
+                    status: response.status,
+                    statusText: response.statusText,
+                    headers: responseHeaders,
+                    body,
+                    responseTime,
+                  },
+                });
+                logs = [...logs, ...testResult.logs];
+                scriptTests = testResult.tests.map((test) => ({ ...test }));
+                if (testResult.collectionChanges.length > 0) options.onCollectionChanges?.(testResult.collectionChanges);
+                if (testResult.environmentChanges.length > 0) options.onEnvironmentChanges?.(testResult.environmentChanges);
+                if (testResult.error) scriptError = `Test script: ${testResult.error}`;
+              }
+
+              const result: ApiClientExecutionResult = {
+                request: historyRequest,
+                scripts,
+                executedMethod,
+                resolvedUrl,
+                status: response.status,
+                statusText: response.statusText,
+                responseTime,
+                ...(scriptTests.length ? { scriptTests } : {}),
+                ...(logs.length ? { scriptLogs: [...logs] } : {}),
+                ...(scriptError ? { scriptError } : {}),
+              };
+              return {
+                result,
+                response: {
+                  status: response.status,
+                  statusText: response.statusText,
+                  headers: responseHeaders,
+                  body,
+                  responseTime,
+                },
+                scriptTests,
+                scriptLogs: logs,
+                ...(scriptError ? { scriptError } : {}),
+              };
+            } catch (cause) {
+              const error = messageFor(cause);
+              const outcome: ApiClientExecutionOutcome = {
+                error,
+                scriptTests,
+                scriptLogs: logs,
+              };
+              if (!requestAttempted) return outcome;
+              outcome.result = {
+                request: historyRequest,
+                scripts,
+                executedMethod,
+                resolvedUrl,
+                responseTime: startedAt ? now() - startedAt : undefined,
+                error,
+                ...(logs.length ? { scriptLogs: [...logs] } : {}),
+              };
+              return outcome;
+            }
+          }
+          '''
+          execution = '\n'.join(line[10:] if line.startswith('          ') else line for line in execution.splitlines()) + '\n'
+          Path('packages/client/src/utils/api-client-execution.ts').write_text(execution)
+
+          tests = r'''import { executeApiClientRequest } from './api-client-execution';
+
+          function mockResponse(body: string, init: { status?: number; statusText?: string; headers?: HeadersInit } = {}): Response {
+            return {
+              status: init.status ?? 200,
+              statusText: init.statusText ?? 'OK',
+              headers: new Headers(init.headers),
+              text: async () => body,
+            } as Response;
+          }
+
+          describe('api-client-execution', () => {
+            it('runs pre-request scripts, fetches, runs tests, and reports mutations through one execution path', async () => {
+              const built: Array<{ method: string; url: string }> = [];
+              const environmentChanges: Array<{ action: 'set' | 'unset'; key: string; value?: string }> = [];
+              let clock = 0;
+              const fetcher: typeof fetch = async (input, init) => {
+                expect(String(input)).toBe('https://api.example.test/pets/42');
+                expect(new Headers(init?.headers).get('x-trace')).toBe('42');
+                return mockResponse('{"id":42}', { headers: { 'content-type': 'application/json', 'x-trace': 'server' } });
+              };
+
+              const outcome = await executeApiClientRequest({
+                request: { method: 'GET', url: '{{baseUrl}}/pets/{{petId}}', headers: [] },
+                scripts: {
+                  preRequest: `
+                    flex.variables.set('petId', '42');
+                    flex.request.headers.set('X-Trace', '{{petId}}');
+                    console.log('prepared');
+                  `,
+                  tests: `
+                    flex.test('status is 200', () => flex.expect(flex.response.code).to.equal(200));
+                    flex.test('body has id', () => flex.expect(flex.response.json()).to.have.property('id', 42));
+                    flex.environment.set('lastPet', String(flex.response.json().id));
+                    console.log('checked');
+                  `,
+                },
+                variables: { baseUrl: 'https://api.example.test', petId: '1' },
+                environmentVariables: {},
+                fetcher,
+                now: () => { clock += 25; return clock; },
+                onRequestBuilt: (request) => built.push({ method: request.method, url: request.url }),
+                onEnvironmentChanges: (changes) => environmentChanges.push(...changes),
+              });
+
+              expect(built).toEqual([{ method: 'GET', url: 'https://api.example.test/pets/42' }]);
+              expect(environmentChanges).toEqual([{ action: 'set', key: 'lastPet', value: '42' }]);
+              expect(outcome.error).toBeUndefined();
+              expect(outcome.scriptError).toBeUndefined();
+              expect(outcome.scriptLogs).toEqual(['prepared', 'checked']);
+              expect(outcome.scriptTests).toEqual([
+                { name: 'status is 200', passed: true },
+                { name: 'body has id', passed: true },
+              ]);
+              expect(outcome.response).toMatchObject({ status: 200, statusText: 'OK', body: '{"id":42}', responseTime: 25 });
+              expect(outcome.result).toMatchObject({
+                executedMethod: 'GET',
+                resolvedUrl: 'https://api.example.test/pets/42',
+                status: 200,
+                responseTime: 25,
+              });
+              expect(outcome.result?.request.url).toBe('{{baseUrl}}/pets/{{petId}}');
+            });
+
+            it('applies auth resolution and request interception before fetch', async () => {
+              const fetcher: typeof fetch = async (input, init) => {
+                expect(String(input)).toBe('https://proxy.example.test/resource');
+                expect(new Headers(init?.headers).get('authorization')).toBe('Bearer inherited-token');
+                expect(new Headers(init?.headers).get('x-proxy')).toBe('yes');
+                return mockResponse('ok');
+              };
+
+              const outcome = await executeApiClientRequest({
+                request: { method: 'GET', url: 'https://api.example.test/resource', auth: { type: 'inherit' } },
+                resolveAuth: () => ({ type: 'bearer', token: 'inherited-token' }),
+                requestInterceptor: (request) => ({
+                  ...request,
+                  url: 'https://proxy.example.test/resource',
+                  headers: { ...Object.fromEntries(new Headers(request.headers).entries()), 'X-Proxy': 'yes' },
+                }),
+                fetcher,
+              });
+
+              expect(outcome.result?.resolvedUrl).toBe('https://proxy.example.test/resource');
+              expect(outcome.result?.status).toBe(200);
+            });
+
+            it('aborts before fetch when the pre-request script fails', async () => {
+              let fetchCalls = 0;
+              const fetcher: typeof fetch = async () => {
+                fetchCalls += 1;
+                return mockResponse('unexpected');
+              };
+
+              const outcome = await executeApiClientRequest({
+                request: { method: 'GET', url: 'https://api.example.test' },
+                scripts: { preRequest: `console.log('before'); throw new Error('boom');`, tests: '' },
+                fetcher,
+              });
+
+              expect(fetchCalls).toBe(0);
+              expect(outcome.result).toBeUndefined();
+              expect(outcome.error).toBeUndefined();
+              expect(outcome.scriptLogs).toEqual(['before']);
+              expect(outcome.scriptError).toContain('Pre-request script: boom');
+            });
+
+            it('returns a history-compatible result for a failed attempted request', async () => {
+              let clock = 0;
+              const fetcher: typeof fetch = async () => { throw new Error('offline'); };
+              const outcome = await executeApiClientRequest({
+                request: { method: 'POST', url: 'https://api.example.test/pets', body: '{}', contentType: 'application/json' },
+                fetcher,
+                now: () => { clock += 10; return clock; },
+              });
+
+              expect(outcome.error).toBe('offline');
+              expect(outcome.response).toBeUndefined();
+              expect(outcome.result).toMatchObject({
+                executedMethod: 'POST',
+                resolvedUrl: 'https://api.example.test/pets',
+                responseTime: 10,
+                error: 'offline',
+              });
+            });
+          });
+          '''
+          tests = '\n'.join(line[10:] if line.startswith('          ') else line for line in tests.splitlines()) + '\n'
+          Path('packages/client/src/utils/api-client-execution.test.ts').write_text(tests)
+
+          path = Path('packages/client/src/components/ApiClient.tsx')
+          text = path.read_text()
+          text = text.replace(
+            "import { buildHttpRequest } from '../utils/http-client';\nimport { cloneApiClientScripts, runApiClientScript } from '../utils/api-client-scripting';",
+            "import { executeApiClientRequest } from '../utils/api-client-execution';\nimport { buildHttpRequest } from '../utils/http-client';\nimport { cloneApiClientScripts } from '../utils/api-client-scripting';",
+          )
+          text = text.replace(
+            "import type { HttpAuth, HttpKeyValue, HttpRequestDraft, HttpVariables } from '../utils/http-client';",
+            "import type { ApiClientExecutionResult } from '../utils/api-client-execution';\nimport type { HttpAuth, HttpKeyValue, HttpRequestDraft, HttpVariables } from '../utils/http-client';",
+          )
+          interface = '''export interface ApiClientExecutionResult {\n  request: HttpRequestDraft;\n  scripts: ApiClientRequestScripts;\n  executedMethod: string;\n  resolvedUrl: string;\n  status?: number;\n  statusText?: string;\n  responseTime?: number;\n  error?: string;\n  scriptTests?: ApiClientScriptTestResult[];\n  scriptLogs?: string[];\n  scriptError?: string;\n}\n\n'''
+          if interface not in text:
+            raise SystemExit('ApiClientExecutionResult interface block not found')
+          text = text.replace(interface, "export type { ApiClientExecutionResult } from '../utils/api-client-execution';\n\n")
+          start = text.index('  const execute = async () => {')
+          end = text.index('\n\n  const passedTests', start)
+          replacement = '''  const execute = async () => {
+            onExecutionStart?.();
+            setLoading(true);
+            setError(null);
+            setScriptError(null);
+            setScriptTests([]);
+            setScriptLogs([]);
+            setResponse(null);
+            try {
+              const outcome = await executeApiClientRequest({
+                request: draft,
+                scripts,
+                credentials,
+                requestInterceptor,
+                resolveAuth,
+                variables,
+                collectionVariables,
+                externalVariables,
+                environmentVariables,
+                onRequestBuilt: (request) => onRequestChangeRef.current?.(request),
+                onCollectionChanges,
+                onEnvironmentChanges,
+              });
+              setError(outcome.error || null);
+              setScriptError(outcome.scriptError || null);
+              setScriptTests(outcome.scriptTests);
+              setScriptLogs(outcome.scriptLogs);
+              if (outcome.response) {
+                setResponse({
+                  status: outcome.response.status,
+                  statusText: outcome.response.statusText,
+                  headers: outcome.response.headers.map(([key, value]) => `${key}: ${value}`).join('\\n'),
+                  body: outcome.response.body,
+                });
+              }
+              if (outcome.result) onExecutionComplete?.(outcome.result);
+            } finally {
+              setLoading(false);
+            }
+          };'''
+          text = text[:start] + replacement + text[end:]
+          path.write_text(text)
+
+          index = Path('packages/client/src/index.ts')
+          index_text = index.read_text()
+          marker = "export { buildHttpRequest, requestDraftFromBuiltRequest, resolveHttpRequestDraftVariables } from './utils/http-client';\n"
+          addition = "export { executeApiClientRequest } from './utils/api-client-execution';\nexport type { ApiClientExecutionOutcome, ApiClientExecutionResponse, ExecuteApiClientRequestOptions } from './utils/api-client-execution';\n"
+          if addition not in index_text:
+            index_text = index_text.replace(marker, marker + addition)
+          index.write_text(index_text)
+          PY
+
+      - name: Validate focused diff
+        run: |
+          git diff --check
+          changed=$(git diff --name-only)
+          printf '%s\n' "$changed"
+          unexpected=$(printf '%s\n' "$changed" | grep -Ev '^(packages/client/src/components/ApiClient\.tsx|packages/client/src/index\.ts|packages/client/src/utils/api-client-execution\.ts|packages/client/src/utils/api-client-execution\.test\.ts)$' || true)
+          if [ -n "$unexpected" ]; then
+            echo "Unexpected changed files:"
+            echo "$unexpected"
+            exit 1
+          fi
+          test "$(printf '%s\n' "$changed" | sed '/^$/d' | wc -l)" -eq 4
+
+      - name: Build core
+        run: npm run build:core
+
+      - name: Lint client
+        run: npm run lint -w packages/client
+
+      - name: Test client
+        run: npm run test -w packages/client -- --runInBand
+
+      - name: Build client
+        run: npm run build -w packages/client
+
+      - name: Commit clean 2.9 execution slice
+        run: |
+          rm .github/workflows/tmp-prepare-2.9-execution-engine.yml
+          git config user.name 'Vishnu R'
+          git config user.email '45818225+bluejeans117@users.noreply.github.com'
+          git add packages/client/src/components/ApiClient.tsx \
+                  packages/client/src/index.ts \
+                  packages/client/src/utils/api-client-execution.ts \
+                  packages/client/src/utils/api-client-execution.test.ts \
+                  .github/workflows/tmp-prepare-2.9-execution-engine.yml
+          git commit -m 'feat: api-client/2.9: extract shared request execution' \
+            -m 'Move request execution, scripting, auth resolution, interception, fetch timing, response tests, and mutation reporting into a reusable API Client execution utility. Keep the existing ApiClient UI behavior by delegating Send through the shared engine and expose the executor for the upcoming collection runner.'
+          git push origin HEAD:tmp/prepare-2.9-execution-engine
