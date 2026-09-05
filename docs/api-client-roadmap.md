@@ -1,6 +1,6 @@
 # API Client roadmap: FlexDoc 2.3.0 → 2.8.0
 
-FlexDoc 2.3.0 was the last coordinated product release before the API Client workspace grew through several focused development milestones. Those milestone numbers described source-development slices; they were not separate published FlexDoc package releases. The coordinated product line therefore moves directly from published **2.3.0** to **2.8.0** once the 2.8 definition of done is satisfied.
+FlexDoc 2.3.0 was the last coordinated product release before the API Client workspace grew through several focused development milestones. Those milestone numbers described source-development slices; they were not separate published FlexDoc package releases. The coordinated product line therefore moves directly from published **2.3.0** to the **2.8.0 release candidate** now that the 2.8 source definition of done is satisfied.
 
 Ecosystem adapters remain independently versioned. `@prauga/flexdoc-client` and `@prauga/flexdoc-backend` carry the coordinated FlexDoc product version because they own and distribute the canonical renderer. Native adapters receive their own semantic-version increment when they package a new renderer, rather than being renamed to the product version.
 
@@ -13,7 +13,7 @@ Ecosystem adapters remain independently versioned. `@prauga/flexdoc-client` and 
 | **2.5** | hierarchical collection/folder/request auth, OpenAPI auth handoff, OAuth access tokens, collection-variable scripting | complete |
 | **2.6** | persisted post-response tests and script output in request history | complete |
 | **2.7** | canonical Try It → API Client request sessions, inherit-first auth defaults, complete browser OAuth grant flows | complete |
-| **2.8** | Postman import into the canonical standalone workspace and coordinated product-version catch-up | current |
+| **2.8** | Postman import into the canonical standalone workspace and coordinated product-version catch-up | complete |
 
 Viewer expansion defaults/settings and renderer-option parity landed before the 2.8 release candidate and are included in the 2.8 product surface.
 
@@ -37,9 +37,9 @@ The 2.8 source release is complete when all of the following are true:
 - [x] Postman environment JSON imports named environment variables and integrates with normal variable precedence
 - [x] unsupported Postman auth/script/body behavior is surfaced as an import warning rather than silently treated as equivalent
 - [x] the browser import workflow accepts collection and environment files together and imported state survives reload
-- [ ] coordinated source versions and example pins represent the 2.8 release candidate
-- [ ] canonical standalone renderer assets are rebuilt and synchronized into every adapter that embeds them
-- [ ] unit, build, browser E2E, adapter parity, framework coverage, and package/version guards are green on the exact final head
+- [x] coordinated source versions and example pins represent the 2.8 release candidate
+- [x] canonical standalone renderer assets are rebuilt and synchronized into every adapter that embeds them
+- [x] unit, build, browser E2E, adapter parity, framework coverage, and package/version guards are green on the exact final head
 
 ## Release interpretation
 
