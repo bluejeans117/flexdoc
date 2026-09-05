@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { AlertCircle, Loader2, Play, Plus, Trash2 } from 'lucide-react';
 import { CodeBlock } from './CodeBlock';
 import { OAuthEditor } from './ApiClientAuthEditor';
+import { ApiClientScriptEditor } from './ApiClientScriptEditor';
 import { executeApiClientRequest } from '../utils/api-client-execution';
 import { buildHttpRequest } from '../utils/http-client';
 import { cloneApiClientScripts } from '../utils/api-client-scripting';
@@ -273,24 +274,36 @@ export const ApiClient: React.FC<ApiClientProps> = ({
         </div>
         <div className='grid gap-3 xl:grid-cols-2'>
           <label className='text-sm font-medium'>Pre-request script
-            <textarea
-              aria-label='Pre-request script'
-              rows={8}
-              className={`mt-1 w-full rounded-md border px-3 py-2 font-mono text-xs ${inputClass}`}
-              placeholder="flex.environment.set('token', '...');\nflex.request.headers.set('X-Trace', 'value');"
-              value={scripts.preRequest}
-              onChange={(event) => setScripts((current) => ({ ...current, preRequest: event.target.value }))}
-            />
+            <div className='mt-1'>
+              <ApiClientScriptEditor
+                ariaLabel='Pre-request script'
+                phase='pre-request'
+                theme={theme}
+                value={scripts.preRequest}
+                onChange={(value) => setScripts((current) => ({ ...current, preRequest: value }))}
+                variableKeys={{
+                  environment: Object.keys(environmentVariables),
+                  collection: Object.keys(collectionVariables),
+                  variables: Object.keys(variables),
+                }}
+              />
+            </div>
           </label>
           <label className='text-sm font-medium'>Tests
-            <textarea
-              aria-label='Tests script'
-              rows={8}
-              className={`mt-1 w-full rounded-md border px-3 py-2 font-mono text-xs ${inputClass}`}
-              placeholder="flex.test('status is 200', () => {\n  flex.expect(flex.response.code).to.equal(200);\n});"
-              value={scripts.tests}
-              onChange={(event) => setScripts((current) => ({ ...current, tests: event.target.value }))}
-            />
+            <div className='mt-1'>
+              <ApiClientScriptEditor
+                ariaLabel='Tests script'
+                phase='tests'
+                theme={theme}
+                value={scripts.tests}
+                onChange={(value) => setScripts((current) => ({ ...current, tests: value }))}
+                variableKeys={{
+                  environment: Object.keys(environmentVariables),
+                  collection: Object.keys(collectionVariables),
+                  variables: Object.keys(variables),
+                }}
+              />
+            </div>
           </label>
         </div>
       </section>
