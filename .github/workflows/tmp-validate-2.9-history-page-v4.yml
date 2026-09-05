@@ -1,0 +1,76 @@
+name: Temporary 2.9 History Page Validation v4
+
+on:
+  push:
+    branches:
+      - tmp/prepare-2.9-history-page
+
+permissions:
+  contents: write
+
+jobs:
+  validate:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Check out branch
+        uses: actions/checkout@v6
+        with:
+          ref: tmp/prepare-2.9-history-page
+          fetch-depth: 0
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 22.22.3
+          cache: npm
+
+      - name: Install repository dependencies
+        run: npm ci --ignore-scripts --no-audit --no-fund
+
+      - name: Wire history page
+        run: |
+          python .github/scripts/tmp-wire-2.9-history-page.py
+          python .github/scripts/tmp-fix-2.9-history-page-test.py
+          python .github/scripts/tmp-fix-2.9-history-page-selection.py
+          python .github/scripts/tmp-fix-2.9-history-page-async-tests.py
+
+      - name: Validate focused diff
+        run: |
+          test -f packages/client/src/components/ApiClientHistoryPage.tsx
+          test -f packages/client/src/components/ApiClientHistoryPage.test.tsx
+          test -f packages/client/src/utils/api-client-history-details.test.ts
+          git diff --check
+
+      - name: Build core
+        run: npm run build:core
+
+      - name: Lint client
+        run: npm run lint -w packages/client
+
+      - name: Test client
+        run: npm run test -w packages/client -- --runInBand
+
+      - name: Build client library and standalone
+        run: npm run build -w packages/client
+
+      - name: Commit validated product source
+        run: |
+          git config user.name 'Vishnu R'
+          git config user.email '45818225+bluejeans117@users.noreply.github.com'
+          git add \
+            packages/client/src/utils/api-client-execution.ts \
+            packages/client/src/utils/api-client-workspace.ts \
+            packages/client/src/components/ApiClientHistory.tsx \
+            packages/client/src/components/ApiClientHistoryPage.tsx \
+            packages/client/src/components/ApiClientWorkspace.tsx \
+            packages/client/src/index.ts \
+            packages/client/src/utils/api-client-execution.test.ts \
+            packages/client/src/utils/api-client-history-details.test.ts \
+            packages/client/src/components/ApiClientHistoryPage.test.tsx
+          git diff --cached --check
+          if git diff --cached --quiet; then
+            echo 'Validated product tree already committed.'
+            exit 0
+          fi
+          git commit -m 'feat: api-client/2.9: add full request history' -m 'Promote history from a compact sidebar list to a searchable full-page request inspector with replay, filters, response payloads, tests, logs, and deletion controls. Persist response headers and bounded response bodies for future history entries while remaining compatible with existing workspace data.'
+          git push origin HEAD:tmp/prepare-2.9-history-page
