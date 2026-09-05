@@ -1,7 +1,17 @@
 import React, { useEffect, useRef } from 'react';
-import { basicSetup, EditorView } from 'codemirror';
+import {
+  autocompletion,
+  completionKeymap,
+} from '@codemirror/autocomplete';
 import type { Completion, CompletionContext, CompletionResult } from '@codemirror/autocomplete';
-import { completionPath, javascript, javascriptLanguage } from '@codemirror/lang-javascript';
+import {
+  drawSelection,
+  EditorView,
+  highlightActiveLine,
+  highlightActiveLineGutter,
+  keymap,
+  lineNumbers,
+} from '@codemirror/view';
 import {
   apiClientScriptMemberCompletions,
   apiClientScriptVariableKeyCompletions,
@@ -37,7 +47,7 @@ function toCompletion(item: ApiClientScriptCompletionItem): Completion {
   };
 }
 
-function assertionCompletion(textBeforeCursor: string, phase: ApiClientScriptPhase): { path: string; prefix: string } | null {
+function assertionCompletion(textBeforeCursor: string): { path: string; prefix: string } | null {
   const start = textBeforeCursor.lastIndexOf('flex.expect(');
   if (start < 0) return null;
   const tail = textBeforeCursor.slice(start);
@@ -50,7 +60,7 @@ function assertionCompletion(textBeforeCursor: string, phase: ApiClientScriptPha
     const match = tail.match(pattern);
     if (match) return { path, prefix: match[1] || '' };
   }
-  return phase === 'tests' || phase === 'pre-request' ? null : null;
+  return null;
 }
 
 function variableKeyCompletion(
@@ -59,6 +69,12 @@ function variableKeyCompletion(
   const match = textBeforeCursor.match(/flex\.(environment|collection|variables)\.(?:get|has|set|unset)\(\s*['"]([^'"]*)$/);
   if (!match) return null;
   return { scope: match[1] as keyof ApiClientScriptVariableKeys, prefix: match[2] || '' };
+}
+
+function memberCompletion(textBeforeCursor: string): { path: string; prefix: string } | null {
+  const match = textBeforeCursor.match(/(?:^|[^\w$])((?:flex|console)(?:\.[A-Za-z_$][\w$]*)*)\.([A-Za-z_$][\w$]*)?$/);
+  if (!match) return null;
+  return { path: match[1], prefix: match[2] || '' };
 }
 
 function createCompletionSource(phase: ApiClientScriptPhase, variableKeys: ApiClientScriptVariableKeys) {
@@ -70,30 +86,29 @@ function createCompletionSource(phase: ApiClientScriptPhase, variableKeys: ApiCl
       return options.length > 0 ? { from: context.pos - variable.prefix.length, options, validFor: /^[\w.-]*$/ } : null;
     }
 
-    const assertion = assertionCompletion(textBeforeCursor, phase);
+    const assertion = assertionCompletion(textBeforeCursor);
     if (assertion) {
       const options = apiClientScriptMemberCompletions(assertion.path, phase).map(toCompletion);
-      return { from: context.pos - assertion.prefix.length, options, validFor: /^\w*$/ };
+      return options.length > 0 ? { from: context.pos - assertion.prefix.length, options, validFor: /^\w*$/ } : null;
     }
 
-    const path = completionPath(context);
-    if (!path) return null;
-    if (path.path.length === 0) {
-      if (!context.explicit && !'flex'.startsWith(path.name) && !'console'.startsWith(path.name)) return null;
-      return {
-        from: context.pos - path.name.length,
-        options: [
-          { label: 'flex', type: 'namespace', detail: 'FlexDoc scripting API', info: 'Request, response, variables, assertions, and test helpers.' },
-          { label: 'console', type: 'namespace', detail: 'Script console', info: 'Captured log, info, warn, and error output.' },
-        ],
-        validFor: /^\w*$/,
-      };
+    const member = memberCompletion(textBeforeCursor);
+    if (member) {
+      const options = apiClientScriptMemberCompletions(member.path, phase).map(toCompletion);
+      return options.length > 0 ? { from: context.pos - member.prefix.length, options, validFor: /^\w*$/ } : null;
     }
 
-    const memberPath = path.path.join('.');
-    const options = apiClientScriptMemberCompletions(memberPath, phase).map(toCompletion);
-    if (options.length === 0) return null;
-    return { from: context.pos - path.name.length, options, validFor: /^\w*$/ };
+    const word = context.matchBefore(/[A-Za-z_$][\w$]*/);
+    if (!word) return null;
+    if (!context.explicit && !'flex'.startsWith(word.text) && !'console'.startsWith(word.text)) return null;
+    return {
+      from: word.from,
+      options: [
+        { label: 'flex', type: 'namespace', detail: 'FlexDoc scripting API', info: 'Request, response, variables, assertions, and test helpers.' },
+        { label: 'console', type: 'namespace', detail: 'Script console', info: 'Captured log, info, warn, and error output.' },
+      ],
+      validFor: /^\w*$/,
+    };
   };
 }
 
@@ -137,9 +152,13 @@ export const ApiClientScriptEditor: React.FC<ApiClientScriptEditorProps> = ({
       parent: hostRef.current,
       doc: value,
       extensions: [
-        basicSetup,
-        javascript(),
-        javascriptLanguage.data.of({ autocomplete: completionSource }),
+        lineNumbers(),
+        highlightActiveLineGutter(),
+        drawSelection(),
+        highlightActiveLine(),
+        EditorView.lineWrapping,
+        keymap.of(completionKeymap),
+        autocompletion({ override: [completionSource], activateOnTyping: true, maxRenderedOptions: 30 }),
         EditorView.contentAttributes.of({ 'aria-label': ariaLabel, spellcheck: 'false', 'data-api-client-script-phase': phase }),
         EditorView.updateListener.of((update) => {
           if (update.docChanged) onChangeRef.current(update.state.doc.toString());
