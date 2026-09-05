@@ -1,0 +1,131 @@
+name: Temporary 2.9 Scripting IntelliSense
+
+on:
+  push:
+    branches:
+      - tmp/prepare-2.9-script-intellisense
+
+permissions:
+  contents: write
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out branch
+        uses: actions/checkout@v6
+        with:
+          ref: tmp/prepare-2.9-script-intellisense
+          fetch-depth: 0
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: '22.22.3'
+          cache: npm
+
+      - name: Install CodeMirror scripting dependencies
+        run: npm install --ignore-scripts --no-audit --no-fund -w packages/client codemirror@^6.11.0 @codemirror/autocomplete@^6.20.3 @codemirror/lang-javascript@^6.2.5
+
+      - name: Wire smart script editors
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          api_path = Path('packages/client/src/components/ApiClient.tsx')
+          api = api_path.read_text()
+          import_marker = "import { OAuthEditor } from './ApiClientAuthEditor';\n"
+          if "ApiClientScriptEditor" not in api:
+            if import_marker not in api:
+              raise SystemExit('ApiClient import marker not found')
+            api = api.replace(import_marker, import_marker + "import { ApiClientScriptEditor } from './ApiClientScriptEditor';\n", 1)
+
+          section = api.index("<section className='space-y-3 border-t pt-4' aria-labelledby='api-client-scripts-heading'>")
+          start = api.index("        <div className='grid gap-3 xl:grid-cols-2'>", section)
+          end_marker = "        </div>\n      </section>"
+          end = api.index(end_marker, start)
+          smart_grid = '''        <div className='grid gap-3 xl:grid-cols-2'>
+          <label className='text-sm font-medium'>Pre-request script
+            <div className='mt-1'>
+              <ApiClientScriptEditor
+                ariaLabel='Pre-request script'
+                phase='pre-request'
+                theme={theme}
+                value={scripts.preRequest}
+                onChange={(value) => setScripts((current) => ({ ...current, preRequest: value }))}
+                variableKeys={{
+                  environment: Object.keys(environmentVariables),
+                  collection: Object.keys(collectionVariables),
+                  variables: Object.keys(variables),
+                }}
+              />
+            </div>
+          </label>
+          <label className='text-sm font-medium'>Tests
+            <div className='mt-1'>
+              <ApiClientScriptEditor
+                ariaLabel='Tests script'
+                phase='tests'
+                theme={theme}
+                value={scripts.tests}
+                onChange={(value) => setScripts((current) => ({ ...current, tests: value }))}
+                variableKeys={{
+                  environment: Object.keys(environmentVariables),
+                  collection: Object.keys(collectionVariables),
+                  variables: Object.keys(variables),
+                }}
+              />
+            </div>
+          </label>
+'''
+          api = api[:start] + smart_grid + api[end:]
+          api_path.write_text(api)
+
+          index_path = Path('packages/client/src/index.ts')
+          index = index_path.read_text()
+          component_marker = "export type { ApiClientExecutionResult, ApiClientProps } from './components/ApiClient';\n"
+          component_exports = "export { ApiClientScriptEditor } from './components/ApiClientScriptEditor';\nexport type { ApiClientScriptEditorProps } from './components/ApiClientScriptEditor';\n"
+          if component_exports not in index:
+            if component_marker not in index:
+              raise SystemExit('index component export marker not found')
+            index = index.replace(component_marker, component_marker + component_exports, 1)
+
+          scripting_marker = "export { cloneApiClientScripts, EMPTY_API_CLIENT_SCRIPTS, runApiClientScript } from './utils/api-client-scripting';\n"
+          intellisense_exports = "export { API_CLIENT_SCRIPT_COMPLETION_PATHS, apiClientScriptMemberCompletions, apiClientScriptVariableKeyCompletions } from './utils/api-client-script-intellisense';\nexport type { ApiClientScriptCompletionItem, ApiClientScriptCompletionKind, ApiClientScriptPhase, ApiClientScriptVariableKeys } from './utils/api-client-script-intellisense';\n"
+          if intellisense_exports not in index:
+            if scripting_marker not in index:
+              raise SystemExit('index scripting export marker not found')
+            index = index.replace(scripting_marker, scripting_marker + intellisense_exports, 1)
+          index_path.write_text(index)
+          PY
+
+      - name: Validate source diff
+        run: |
+          git diff --check
+          git status --short
+
+      - name: Build core
+        run: npm run build:core
+
+      - name: Lint client
+        run: npm run lint -w packages/client
+
+      - name: Test client
+        run: npm run test -w packages/client -- --runInBand
+
+      - name: Build client
+        run: npm run build -w packages/client
+
+      - name: Commit validated source and dependency metadata
+        run: |
+          git config user.name 'Vishnu R'
+          git config user.email '45818225+bluejeans117@users.noreply.github.com'
+          git add package-lock.json packages/client/package.json \
+            packages/client/src/components/ApiClient.tsx \
+            packages/client/src/components/ApiClientScriptEditor.tsx \
+            packages/client/src/index.ts \
+            packages/client/src/utils/api-client-script-intellisense.ts \
+            packages/client/src/utils/api-client-script-intellisense.test.ts
+          git diff --cached --check
+          git commit -m 'feat: api-client/2.9: add scripting intellisense' -m 'Replace plain script textareas with a CodeMirror JavaScript editor and phase-aware FlexDoc IntelliSense. Suggest the real flex scripting API, signatures, documentation, assertion chains, console helpers, and known variable keys while keeping the completion catalogue covered against the runtime.'
+          git push origin HEAD:tmp/prepare-2.9-script-intellisense
