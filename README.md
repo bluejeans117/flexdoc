@@ -16,6 +16,8 @@ No FlexDoc account, hosted dashboard, telemetry service, or runtime CDN is requi
 - **Rust:** Axum, Actix Web
 - **Elixir:** Plug, Phoenix
 
+The backend-coverage program shipped in 2.3.0. API Client development then continued through internal 2.4–2.7 milestones without publishing artificial intermediate FlexDoc package releases. The next coordinated product release is **2.8.0**; see [`docs/api-client-roadmap.md`](./docs/api-client-roadmap.md) for the milestone mapping and definition of done.
+
 ## Package family
 
 | Ecosystem | Package | Source version |
@@ -38,7 +40,7 @@ No FlexDoc account, hosted dashboard, telemetry service, or runtime CDN is requi
 
 Ecosystem package versions are intentionally independent. Renderer contract v1 is the cross-language compatibility boundary.
 
-> This source tree is prepared for the coordinated **FlexDoc 2.3.0** release. Ecosystem packages keep independent semantic versions while sharing renderer contract v1.
+> The package table reflects the versions encoded by the current source commit. Release-preparation commits update these source versions only when the matching release candidate is ready; source version numbers alone do not mean an artifact has been published.
 
 ## Architecture
 
@@ -57,7 +59,7 @@ canonical browser renderer
 
 Adapters serve version-matched local renderer assets and do not reimplement schemas, request serialization, code samples, Try It, API Client behavior, navigation, or theming.
 
-See [`examples/`](./examples/README.md), [`docs/framework-coverage-roadmap.md`](./docs/framework-coverage-roadmap.md), and [`docs/distribution.md`](./docs/distribution.md).
+See [`examples/`](./examples/README.md), [`docs/framework-coverage-roadmap.md`](./docs/framework-coverage-roadmap.md), [`docs/api-client-roadmap.md`](./docs/api-client-roadmap.md), and [`docs/distribution.md`](./docs/distribution.md).
 
 ## License
 
