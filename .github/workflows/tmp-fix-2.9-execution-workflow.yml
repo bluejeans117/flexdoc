@@ -24,17 +24,8 @@ jobs:
           from pathlib import Path
           path = Path('.github/workflows/tmp-prepare-2.9-execution-engine.yml')
           text = path.read_text()
-          old = """      - name: Validate focused diff
-        run: |
-          git diff --check
-          changed=$(git diff --name-only)
-"""
-          new = """      - name: Validate focused diff
-        run: |
-          git add -N packages/client/src/utils/api-client-execution.ts packages/client/src/utils/api-client-execution.test.ts
-          git diff --check
-          changed=$(git diff --name-only)
-"""
+          old = "      - name: Validate focused diff\n        run: |\n          git diff --check\n          changed=$(git diff --name-only)\n"
+          new = "      - name: Validate focused diff\n        run: |\n          git add -N packages/client/src/utils/api-client-execution.ts packages/client/src/utils/api-client-execution.test.ts\n          git diff --check\n          changed=$(git diff --name-only)\n"
           if old not in text:
               raise SystemExit('focused diff guard block not found')
           path.write_text(text.replace(old, new, 1))
