@@ -5,6 +5,8 @@ export { ApiClient } from './components/ApiClient';
 export type { ApiClientExecutionResult, ApiClientProps } from './components/ApiClient';
 export { ApiClientScriptEditor } from './components/ApiClientScriptEditor';
 export type { ApiClientScriptEditorProps } from './components/ApiClientScriptEditor';
+export { ApiClientHistoryPage } from './components/ApiClientHistoryPage';
+export type { ApiClientHistoryPageProps } from './components/ApiClientHistoryPage';
 export { ApiClientWorkspace } from './components/ApiClientWorkspace';
 export type { ApiClientWorkspaceProps } from './components/ApiClientWorkspace';
 export { App as ApiDocsDemo } from './App';

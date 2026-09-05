@@ -4,6 +4,7 @@ import type { ApiClientExecutionResult, ApiClientProps } from './ApiClient';
 import { ApiClientCollections } from './ApiClientCollections';
 import { ApiClientEnvironments } from './ApiClientEnvironments';
 import { ApiClientHistory } from './ApiClientHistory';
+import { ApiClientHistoryPage } from './ApiClientHistoryPage';
 import { ApiClientImport } from './ApiClientImport';
 import type { HttpAuth, HttpRequestDraft } from '../utils/http-client';
 import type { ApiClientRequestScripts, ApiClientScriptCollectionChange, ApiClientScriptEnvironmentChange } from '../utils/api-client-scripting';
@@ -63,6 +64,7 @@ export const ApiClientWorkspace: React.FC<ApiClientWorkspaceProps> = ({
   const [editorScripts, setEditorScripts] = useState<ApiClientRequestScripts>(initialScriptState);
   const [currentScripts, setCurrentScripts] = useState<ApiClientRequestScripts>(initialScriptState);
   const [editorRevision, setEditorRevision] = useState(0);
+  const [activeView, setActiveView] = useState<'request' | 'history'>('request');
   const [workspace, setWorkspace] = useState<ApiClientWorkspaceState>(initialWorkspace);
   const [selectedCollectionId, setSelectedCollectionId] = useState<string | undefined>(initialWorkspace.collections[0]?.id);
   const [selectedFolderId, setSelectedFolderId] = useState('');
@@ -157,6 +159,7 @@ export const ApiClientWorkspace: React.FC<ApiClientWorkspaceProps> = ({
   };
 
   const loadSavedRequest = (request: HttpRequestDraft, scripts?: ApiClientRequestScripts, collectionId?: string, folderId?: string) => {
+    setActiveView('request');
     const validCollectionId = collectionId && workspace.collections.some((collection) => collection.id === collectionId) ? collectionId : undefined;
     if (validCollectionId) setSelectedCollectionId(validCollectionId);
     const targetCollectionId = validCollectionId || selectedCollectionId;
@@ -202,11 +205,18 @@ export const ApiClientWorkspace: React.FC<ApiClientWorkspaceProps> = ({
           workspace={workspace}
           onWorkspaceChange={setWorkspace}
           onLoadRequest={loadSavedRequest}
+          onViewAll={() => setActiveView('history')}
           theme={theme}
         />
       </div>
     </aside>
-    <ApiClient
+    {activeView === 'history' ? <ApiClientHistoryPage
+      workspace={workspace}
+      onWorkspaceChange={setWorkspace}
+      onLoadRequest={loadSavedRequest}
+      onBack={() => setActiveView('request')}
+      theme={theme}
+    /> : <ApiClient
       key={editorRevision}
       {...apiClientProps}
       initialRequest={editorRequest}
@@ -224,6 +234,6 @@ export const ApiClientWorkspace: React.FC<ApiClientWorkspaceProps> = ({
       onExecutionStart={handleExecutionStart}
       onExecutionComplete={handleExecutionComplete}
       onRequestChange={handleRequestChange}
-    />
+    />}
   </div>;
 };
