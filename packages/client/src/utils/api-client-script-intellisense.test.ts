@@ -1,5 +1,6 @@
 import {
   API_CLIENT_SCRIPT_COMPLETION_PATHS,
+  apiClientScriptCompletionsAtPosition,
   apiClientScriptMemberCompletions,
   apiClientScriptVariableKeyCompletions,
 } from './api-client-script-intellisense';
@@ -85,4 +86,27 @@ describe('api-client-script-intellisense', () => {
 
     expect(result.error).toBeUndefined();
   });
+
+  it('resolves dot-triggered, assertion, and explicit completion contexts', () => {
+    expect(apiClientScriptCompletionsAtPosition('flex.', 5, 'pre-request')?.items.map((item) => item.label)).toEqual(expect.arrayContaining(['request', 'environment', 'collection', 'variables', 'expect']));
+    expect(apiClientScriptCompletionsAtPosition('flex.', 5, 'pre-request')?.items.map((item) => item.label)).not.toEqual(expect.arrayContaining(['response', 'test']));
+    expect(apiClientScriptCompletionsAtPosition('flex.', 5, 'tests')?.items.map((item) => item.label)).toEqual(expect.arrayContaining(['response', 'test']));
+
+    const member = apiClientScriptCompletionsAtPosition('flex.request.he', 15, 'pre-request');
+    expect(member).toMatchObject({ from: 13, to: 15 });
+    expect(member?.items.map((item) => item.label)).toEqual(['headers']);
+
+    expect(apiClientScriptCompletionsAtPosition('flex.expect(value).to.be.', 25, 'tests')?.items.map((item) => item.label)).toEqual(expect.arrayContaining(['above', 'below', 'oneOf', 'ok', 'true', 'false']));
+    expect(apiClientScriptCompletionsAtPosition('', 0, 'pre-request', {}, true)?.items.map((item) => item.label)).toEqual(['flex', 'console']);
+  });
+
+  it('resolves known variable names at the caret', () => {
+    const source = "flex.environment.get('to";
+    const completion = apiClientScriptCompletionsAtPosition(source, source.length, 'pre-request', {
+      environment: ['token', 'tenant', 'baseUrl'],
+    });
+    expect(completion).toMatchObject({ from: source.length - 2, to: source.length });
+    expect(completion?.items.map((item) => item.label)).toEqual(['token']);
+  });
+
 });

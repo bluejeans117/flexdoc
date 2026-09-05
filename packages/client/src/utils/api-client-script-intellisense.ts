@@ -1,5 +1,5 @@
 export type ApiClientScriptPhase = 'pre-request' | 'tests';
-export type ApiClientScriptCompletionKind = 'property' | 'method' | 'function' | 'variable';
+export type ApiClientScriptCompletionKind = 'property' | 'method' | 'function' | 'variable' | 'namespace';
 
 export interface ApiClientScriptCompletionItem {
   label: string;
@@ -120,4 +120,81 @@ export function apiClientScriptVariableKeyCompletions(
       signature: key,
       documentation: `Known ${scope === 'variables' ? 'effective' : scope} variable.`,
     }));
+}
+
+
+export interface ApiClientScriptCompletionContext {
+  from: number;
+  to: number;
+  items: ApiClientScriptCompletionItem[];
+}
+
+const ROOT_SCRIPT_COMPLETIONS: ApiClientScriptCompletionItem[] = [
+  { label: 'flex', kind: 'namespace', documentation: 'FlexDoc request, response, variables, assertions, and test scripting API.' },
+  { label: 'console', kind: 'namespace', documentation: 'Captured script console with log, info, warn, and error methods.' },
+];
+
+function assertionCompletionContext(textBeforeCursor: string): { path: string; prefix: string } | null {
+  const start = textBeforeCursor.lastIndexOf('flex.expect(');
+  if (start < 0) return null;
+  const tail = textBeforeCursor.slice(start);
+  const paths: Array<[RegExp, string]> = [
+    [/\.to\.have\.([A-Za-z_$][\w$]*)?$/, 'flex.expect.to.have'],
+    [/\.to\.be\.([A-Za-z_$][\w$]*)?$/, 'flex.expect.to.be'],
+    [/\.to\.([A-Za-z_$][\w$]*)?$/, 'flex.expect.to'],
+  ];
+  for (const [pattern, path] of paths) {
+    const match = tail.match(pattern);
+    if (match) return { path, prefix: match[1] || '' };
+  }
+  return null;
+}
+
+function variableCompletionContext(textBeforeCursor: string): { scope: keyof ApiClientScriptVariableKeys; prefix: string } | null {
+  const match = textBeforeCursor.match(/flex\.(environment|collection|variables)\.(?:get|has|set|unset)\(\s*['"]([^'"]*)$/);
+  if (!match) return null;
+  return { scope: match[1] as keyof ApiClientScriptVariableKeys, prefix: match[2] || '' };
+}
+
+function memberCompletionContext(textBeforeCursor: string): { path: string; prefix: string } | null {
+  const match = textBeforeCursor.match(/(?:^|[^\w$])((?:flex|console)(?:\.[A-Za-z_$][\w$]*)*)\.([A-Za-z_$][\w$]*)?$/);
+  if (!match) return null;
+  return { path: match[1], prefix: match[2] || '' };
+}
+
+export function apiClientScriptCompletionsAtPosition(
+  source: string,
+  position: number,
+  phase: ApiClientScriptPhase,
+  variableKeys: ApiClientScriptVariableKeys = {},
+  explicit = false,
+): ApiClientScriptCompletionContext | null {
+  const safePosition = Math.max(0, Math.min(position, source.length));
+  const before = source.slice(0, safePosition);
+
+  const variable = variableCompletionContext(before);
+  if (variable) {
+    const items = apiClientScriptVariableKeyCompletions(variable.scope, variable.prefix, variableKeys);
+    return items.length > 0 ? { from: safePosition - variable.prefix.length, to: safePosition, items } : null;
+  }
+
+  const assertion = assertionCompletionContext(before);
+  if (assertion) {
+    const items = apiClientScriptMemberCompletions(assertion.path, phase)
+      .filter((item) => item.label.toLowerCase().startsWith(assertion.prefix.toLowerCase()));
+    return items.length > 0 ? { from: safePosition - assertion.prefix.length, to: safePosition, items } : null;
+  }
+
+  const member = memberCompletionContext(before);
+  if (member) {
+    const items = apiClientScriptMemberCompletions(member.path, phase)
+      .filter((item) => item.label.toLowerCase().startsWith(member.prefix.toLowerCase()));
+    return items.length > 0 ? { from: safePosition - member.prefix.length, to: safePosition, items } : null;
+  }
+
+  const word = before.match(/([A-Za-z_$][\w$]*)$/)?.[1] || '';
+  if (!explicit && !word) return null;
+  const items = ROOT_SCRIPT_COMPLETIONS.filter((item) => !word || item.label.startsWith(word));
+  if (!explicit && items.length === 0) return null;
+  return items.length > 0 ? { from: safePosition - word.length, to: safePosition, items: items.map((item) => ({ ...item })) } : null;
 }
