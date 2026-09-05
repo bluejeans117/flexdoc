@@ -130,7 +130,7 @@ export const ApiClientHistoryPage: React.FC<ApiClientHistoryPageProps> = ({ work
           {filtered.map((entry) => {
             const active = selected?.id === entry.id;
             const failed = hasFailure(entry);
-            const origin = entry.collectionId ? workspace.collections.find((candidate) => candidate.id === entry.collectionId)?.name : undefined;
+            const origin = entry.collectionId ? workspace.collections.find((candidate) => candidate.id === entry.collectionId)?.name || 'Deleted collection' : undefined;
             return <button
               key={entry.id}
               type='button'
@@ -156,7 +156,7 @@ export const ApiClientHistoryPage: React.FC<ApiClientHistoryPageProps> = ({ work
                 <div className='min-w-0'>
                   <div className='flex flex-wrap items-center gap-2 text-sm'><span className='font-mono font-bold text-blue-600'>{selected.executedMethod.toUpperCase()}</span><span className={hasFailure(selected) ? 'text-red-600' : mutedClass}>{resultLabel(selected)}</span>{selected.responseTime !== undefined && <span className={mutedClass}>{selected.responseTime} ms</span>}</div>
                   <div className='mt-1 break-all font-mono text-sm'>{selected.resolvedUrl}</div>
-                  <div className={`mt-1 text-xs ${mutedClass}`}>{displayTime(selected.createdAt)}{collection ? ` · ${collection.name}` : ''}{folder ? ` / ${folder.name}` : ''}</div>
+                  <div className={`mt-1 text-xs ${mutedClass}`}>{displayTime(selected.createdAt)}{selected.collectionId ? ` · ${collection?.name || 'Deleted collection'}` : ''}{selected.folderId ? ` / ${folder?.name || 'Deleted folder'}` : ''}</div>
                 </div>
                 <div className='flex shrink-0 gap-2'>
                   <button type='button' className='inline-flex min-h-10 items-center gap-2 rounded-md border px-3 py-2 text-sm font-medium hover:bg-blue-500/10' onClick={() => openInClient(selected)}><RotateCcw className='h-4 w-4' /> Open in client</button>

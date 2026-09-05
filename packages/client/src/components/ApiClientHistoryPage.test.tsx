@@ -66,5 +66,8 @@ describe('ApiClientHistoryPage', () => {
     expect(filterApiClientHistoryEntries(workspace, { query: '', method: 'all', outcome: 'failed' }).map((entry) => entry.id)).toEqual(['history-old']);
     expect(filterApiClientHistoryEntries(workspace, { query: '', method: 'all', outcome: 'success' }).map((entry) => entry.id)).toEqual(['history-new']);
     expect(filterApiClientHistoryEntries(workspace, { query: '', method: 'all', outcome: 'tests' }).map((entry) => entry.id)).toEqual(['history-new']);
+
+    const deletedCollectionWorkspace = { ...workspace, collections: [] };
+    expect(filterApiClientHistoryEntries(deletedCollectionWorkspace, { query: 'deleted collection', method: 'all', outcome: 'all' }).map((entry) => entry.id)).toEqual(['history-new']);
   });
 });

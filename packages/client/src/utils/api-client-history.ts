@@ -22,10 +22,10 @@ export function filterApiClientHistoryEntries(
   const needle = filters.query.trim().toLowerCase();
   return workspace.history.filter((entry) => {
     const collection = entry.collectionId
-      ? workspace.collections.find((candidate) => candidate.id === entry.collectionId)?.name || ''
+      ? workspace.collections.find((candidate) => candidate.id === entry.collectionId)?.name || 'Deleted collection'
       : '';
     const folder = entry.folderId
-      ? workspace.folders.find((candidate) => candidate.id === entry.folderId)?.name || ''
+      ? workspace.folders.find((candidate) => candidate.id === entry.folderId)?.name || 'Deleted folder'
       : '';
     const matchesSearch = !needle || [entry.executedMethod, entry.resolvedUrl, entry.status, entry.statusText, collection, folder]
       .filter((value) => value !== undefined)
