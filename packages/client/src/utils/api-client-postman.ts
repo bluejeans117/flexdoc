@@ -83,6 +83,7 @@ function parsePostmanAuth(
 ): HttpAuth {
   if (!isRecord(value) || typeof value.type !== 'string') return { ...fallback };
   const type = value.type.toLowerCase();
+  if (type === 'inherit') return { ...fallback };
   if (type === 'noauth') return { type: 'none' };
   if (type === 'bearer') return { type: 'bearer', token: authField(value, 'bearer', 'token') };
   if (type === 'basic') {

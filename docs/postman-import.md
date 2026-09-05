@@ -32,6 +32,8 @@ When a workspace has no active environment, the first imported environment becom
 
 The importer translates the common Postman scripting APIs that map directly to FlexDoc's trusted `flex.*` scripting runtime, including collection/environment access, tests, expectations, request data, and response data where supported.
 
+Collection- and folder-level Postman scripts are flattened into each imported request's saved script bundle at import time. FlexDoc does not retain them as shared collection/folder runtime objects, so later edits must be applied to the affected FlexDoc requests rather than expecting Postman-style shared-script propagation.
+
 Postman scripts are not treated as fully compatible JavaScript merely because they parse. APIs without a FlexDoc equivalent, such as Postman request chaining or other sandbox-specific globals, are retained only when useful for review and produce an explicit compatibility warning. Review warnings before relying on imported scripts.
 
 As with native FlexDoc request scripts, imported scripts execute in the documentation page context and are not a security sandbox. Import and execute only scripts you trust.

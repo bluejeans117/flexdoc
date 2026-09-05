@@ -76,6 +76,25 @@ describe('Postman import', () => {
     expect(imported.warnings).toEqual([]);
   });
 
+  it('maps Postman inherit auth without compatibility warnings', () => {
+    const imported = importPostmanCollection({
+      info: { name: 'Inherited auth' },
+      auth: { type: 'bearer', bearer: [{ key: 'token', value: '{{token}}' }] },
+      item: [{
+        name: 'Inherited folder',
+        auth: { type: 'inherit' },
+        item: [{
+          name: 'Inherited request',
+          request: { method: 'GET', url: 'https://example.test', auth: { type: 'inherit' } },
+        }],
+      }],
+    });
+
+    expect(imported.folders[0].auth).toEqual({ type: 'inherit' });
+    expect(imported.requests[0].request.auth).toEqual({ type: 'inherit' });
+    expect(imported.warnings).toEqual([]);
+  });
+
   it('imports raw, urlencoded, GraphQL, and explicitly warns on multipart/file limitations', () => {
     const imported = importPostmanCollection({
       info: { name: 'Bodies' },
