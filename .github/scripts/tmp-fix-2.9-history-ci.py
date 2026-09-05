@@ -22,8 +22,20 @@ replace_once(
 )
 replace_once(
     'packages/client/src/utils/api-client-history.ts',
-    "    const collection = entry.collectionId ? workspace.collections.find((candidate) => candidate.id === entry.collectionId)?.name || '' : '';\n    const folder = entry.folderId ? workspace.folders.find((candidate) => candidate.id === entry.folderId)?.name || '' : '';",
-    "    const collection = entry.collectionId ? workspace.collections.find((candidate) => candidate.id === entry.collectionId)?.name || 'Deleted collection' : '';\n    const folder = entry.folderId ? workspace.folders.find((candidate) => candidate.id === entry.folderId)?.name || 'Deleted folder' : '';",
+    """    const collection = entry.collectionId
+      ? workspace.collections.find((candidate) => candidate.id === entry.collectionId)?.name || ''
+      : '';
+    const folder = entry.folderId
+      ? workspace.folders.find((candidate) => candidate.id === entry.folderId)?.name || ''
+      : '';
+""",
+    """    const collection = entry.collectionId
+      ? workspace.collections.find((candidate) => candidate.id === entry.collectionId)?.name || 'Deleted collection'
+      : '';
+    const folder = entry.folderId
+      ? workspace.folders.find((candidate) => candidate.id === entry.folderId)?.name || 'Deleted folder'
+      : '';
+""",
 )
 replace_once(
     'packages/client/src/components/ApiClientHistoryPage.test.tsx',
