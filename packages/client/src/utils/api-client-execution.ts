@@ -17,6 +17,8 @@ export interface ApiClientExecutionResult {
   status?: number;
   statusText?: string;
   responseTime?: number;
+  responseHeaders?: Array<[string, string]>;
+  responseBody?: string;
   error?: string;
   scriptTests?: ApiClientScriptTestResult[];
   scriptLogs?: string[];
@@ -178,6 +180,8 @@ responseTime,
       status: response.status,
       statusText: response.statusText,
       responseTime,
+      responseHeaders: responseHeaders.map(([key, value]) => [key, value]),
+      responseBody: body,
       ...(scriptTests.length ? { scriptTests } : {}),
       ...(logs.length ? { scriptLogs: [...logs] } : {}),
       ...(scriptError ? { scriptError } : {}),

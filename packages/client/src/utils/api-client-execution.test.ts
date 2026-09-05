@@ -58,7 +58,9 @@ console.log('checked');
       resolvedUrl: 'https://api.example.test/pets/42',
       status: 200,
       responseTime: 25,
+      responseBody: '{"id":42}',
     });
+    expect(outcome.result?.responseHeaders).toEqual(expect.arrayContaining([['content-type', 'application/json'], ['x-trace', 'server']]));
     expect(outcome.result?.request.url).toBe('{{baseUrl}}/pets/{{petId}}');
   });
 
