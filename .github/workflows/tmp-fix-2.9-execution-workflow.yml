@@ -1,0 +1,51 @@
+name: Temporary Fix 2.9 Execution Workflow
+
+on:
+  push:
+    branches:
+      - tmp/prepare-2.9-execution-engine
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out branch
+        uses: actions/checkout@v6
+        with:
+          ref: tmp/prepare-2.9-execution-engine
+          fetch-depth: 0
+
+      - name: Patch focused diff guard
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          path = Path('.github/workflows/tmp-prepare-2.9-execution-engine.yml')
+          text = path.read_text()
+          old = """      - name: Validate focused diff
+        run: |
+          git diff --check
+          changed=$(git diff --name-only)
+"""
+          new = """      - name: Validate focused diff
+        run: |
+          git add -N packages/client/src/utils/api-client-execution.ts packages/client/src/utils/api-client-execution.test.ts
+          git diff --check
+          changed=$(git diff --name-only)
+"""
+          if old not in text:
+              raise SystemExit('focused diff guard block not found')
+          path.write_text(text.replace(old, new, 1))
+          PY
+
+      - name: Commit workflow fix
+        run: |
+          rm .github/workflows/tmp-fix-2.9-execution-workflow.yml
+          git config user.name 'Vishnu R'
+          git config user.email '45818225+bluejeans117@users.noreply.github.com'
+          git add .github/workflows/tmp-prepare-2.9-execution-engine.yml .github/workflows/tmp-fix-2.9-execution-workflow.yml
+          git commit -m 'fix: tooling/2.9: count generated execution files' \
+            -m 'Include intent-to-add entries for the generated execution utility and tests so the disposable focused-diff guard validates all four expected client files.'
+          git push origin HEAD:tmp/prepare-2.9-execution-engine
