@@ -59,7 +59,7 @@ export const ApiClientImport: React.FC<Props> = ({ onWorkspaceChange, onSelected
 
     const collectionImports = documents.filter((document) => document.kind === 'collection');
     const environmentCount = documents.length - collectionImports.length;
-    const selectedCollection = collectionImports.at(-1);
+    const selectedCollection = collectionImports[collectionImports.length - 1];
     if (selectedCollection?.kind === 'collection') onSelectedCollectionChange?.(selectedCollection.result.collection.id);
 
     setWarnings(nextWarnings);

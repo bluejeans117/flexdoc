@@ -60,7 +60,7 @@ test('API Client imports Postman collections and environments into persisted wor
 
   await apiClient.getByRole('button', { name: 'Load saved request Get pet' }).click();
   await expect(apiClient.getByLabel('Request URL')).toHaveValue('{{baseUrl}}/pets/{{petId}}');
-  await expect(apiClient.getByLabel('Test script')).toHaveValue(/flex\.test\('status'/);
+  await expect(apiClient.getByLabel('Tests script')).toHaveValue(/flex\.test\('status'/);
 
   await page.reload();
   apiClient = await openApiClient(page);
