@@ -2,27 +2,17 @@ import React, { useEffect, useRef, useState } from 'react';
 import { AlertCircle, Loader2, Play, Plus, Trash2 } from 'lucide-react';
 import { CodeBlock } from './CodeBlock';
 import { OAuthEditor } from './ApiClientAuthEditor';
+import { executeApiClientRequest } from '../utils/api-client-execution';
 import { buildHttpRequest } from '../utils/http-client';
-import { cloneApiClientScripts, runApiClientScript } from '../utils/api-client-scripting';
+import { cloneApiClientScripts } from '../utils/api-client-scripting';
 import { replaceRequestServer, requestUsesServer, resolveServerUrl } from '../utils/server-url';
+import type { ApiClientExecutionResult } from '../utils/api-client-execution';
 import type { HttpAuth, HttpKeyValue, HttpRequestDraft, HttpVariables } from '../utils/http-client';
 import type { ApiClientRequestScripts, ApiClientScriptCollectionChange, ApiClientScriptEnvironmentChange, ApiClientScriptTestResult } from '../utils/api-client-scripting';
 import type { BuiltRequest } from '../utils/request-builder';
 import type { Server } from '../types/openapi';
 
-export interface ApiClientExecutionResult {
-  request: HttpRequestDraft;
-  scripts: ApiClientRequestScripts;
-  executedMethod: string;
-  resolvedUrl: string;
-  status?: number;
-  statusText?: string;
-  responseTime?: number;
-  error?: string;
-  scriptTests?: ApiClientScriptTestResult[];
-  scriptLogs?: string[];
-  scriptError?: string;
-}
+export type { ApiClientExecutionResult } from '../utils/api-client-execution';
 
 export interface ApiClientProps {
   initialRequest?: Partial<HttpRequestDraft>;
@@ -180,137 +170,45 @@ export const ApiClient: React.FC<ApiClientProps> = ({
   };
 
   const execute = async () => {
-    onExecutionStart?.();
-    const historyRequest = cloneDraft(draft);
-    const historyScripts = cloneApiClientScripts(scripts);
-    let executedMethod = '';
-    let resolvedUrl = '';
-    let startedAt = 0;
-    let requestAttempted = false;
-    let historyRecorded = false;
-    let historyScriptTests: ApiClientScriptTestResult[] = [];
-    let historyScriptLogs: string[] = [];
-    let historyScriptError: string | undefined;
-
-    setLoading(true);
-    setError(null);
-    setScriptError(null);
-    setScriptTests([]);
-    setScriptLogs([]);
-    setResponse(null);
-    try {
-      let executionDraft = cloneDraft(draft);
-      let executionVariables = Object.assign(Object.create(null) as HttpVariables, variables);
-      let executionCollectionVariables = Object.assign(Object.create(null) as HttpVariables, collectionVariables);
-      const executionExternalVariables = Object.assign(Object.create(null) as HttpVariables, externalVariables);
-      let executionEnvironmentVariables = Object.assign(Object.create(null) as HttpVariables, environmentVariables);
-      let logs: string[] = [];
-
-      if (scripts.preRequest.trim()) {
-        const preRequestResult = await runApiClientScript({
-          script: scripts.preRequest,
-          phase: 'pre-request',
-          draft: executionDraft,
-          variables: executionVariables,
-          collectionVariables: executionCollectionVariables,
-          externalVariables: executionExternalVariables,
-          environmentVariables: executionEnvironmentVariables,
-        });
-        executionDraft = preRequestResult.draft;
-        executionVariables = preRequestResult.variables;
-        executionCollectionVariables = preRequestResult.collectionVariables;
-        executionEnvironmentVariables = preRequestResult.environmentVariables;
-        logs = [...logs, ...preRequestResult.logs];
-        historyScriptLogs = [...logs];
-        if (preRequestResult.collectionChanges.length > 0) onCollectionChanges?.(preRequestResult.collectionChanges);
-        if (preRequestResult.environmentChanges.length > 0) onEnvironmentChanges?.(preRequestResult.environmentChanges);
-        if (preRequestResult.error) {
-          setScriptLogs(logs);
-          setScriptError(`Pre-request script: ${preRequestResult.error}`);
-          return;
-        }
-      }
-
-      if (resolveAuth) executionDraft = { ...executionDraft, auth: resolveAuth(executionDraft.auth) };
-      const request = buildHttpRequest(executionDraft, { variables: executionVariables });
-      executedMethod = request.method;
-      resolvedUrl = request.url;
-      onRequestChangeRef.current?.(request);
-      let initWithUrl: RequestInit & { url: string } = { ...request.init, url: request.url, credentials };
-      if (requestInterceptor) initWithUrl = await requestInterceptor(initWithUrl);
-      const { url, ...init } = initWithUrl;
-      resolvedUrl = url;
-      startedAt = Date.now();
-      requestAttempted = true;
-      const result = await fetch(url, init);
-      const body = await result.text();
-      const responseTime = Date.now() - startedAt;
-      const responseHeaders = [...result.headers.entries()];
+  onExecutionStart?.();
+  setLoading(true);
+  setError(null);
+  setScriptError(null);
+  setScriptTests([]);
+  setScriptLogs([]);
+  setResponse(null);
+  try {
+    const outcome = await executeApiClientRequest({
+      request: draft,
+      scripts,
+      credentials,
+      requestInterceptor,
+      resolveAuth,
+      variables,
+      collectionVariables,
+      externalVariables,
+      environmentVariables,
+      onRequestBuilt: (request) => onRequestChangeRef.current?.(request),
+      onCollectionChanges,
+      onEnvironmentChanges,
+    });
+    setError(outcome.error || null);
+    setScriptError(outcome.scriptError || null);
+    setScriptTests(outcome.scriptTests);
+    setScriptLogs(outcome.scriptLogs);
+    if (outcome.response) {
       setResponse({
-        status: result.status,
-        statusText: result.statusText,
-        headers: responseHeaders.map(([key, value]) => `${key}: ${value}`).join('\n'),
-        body,
+        status: outcome.response.status,
+        statusText: outcome.response.statusText,
+        headers: outcome.response.headers.map(([key, value]) => `${key}: ${value}`).join('\n'),
+        body: outcome.response.body,
       });
-      if (scripts.tests.trim()) {
-        const testResult = await runApiClientScript({
-          script: scripts.tests,
-          phase: 'tests',
-          draft: executionDraft,
-          variables: executionVariables,
-          collectionVariables: executionCollectionVariables,
-          externalVariables: executionExternalVariables,
-          environmentVariables: executionEnvironmentVariables,
-          response: {
-            status: result.status,
-            statusText: result.statusText,
-            headers: responseHeaders,
-            body,
-            responseTime,
-          },
-        });
-        logs = [...logs, ...testResult.logs];
-        historyScriptLogs = [...logs];
-        historyScriptTests = testResult.tests.map((test) => ({ ...test }));
-        setScriptTests(testResult.tests);
-        if (testResult.collectionChanges.length > 0) onCollectionChanges?.(testResult.collectionChanges);
-        if (testResult.environmentChanges.length > 0) onEnvironmentChanges?.(testResult.environmentChanges);
-        if (testResult.error) {
-          historyScriptError = `Test script: ${testResult.error}`;
-          setScriptError(historyScriptError);
-        }
-      }
-      historyScriptLogs = [...logs];
-      setScriptLogs(logs);
-      onExecutionComplete?.({
-        request: historyRequest,
-        scripts: historyScripts,
-        executedMethod,
-        resolvedUrl,
-        status: result.status,
-        statusText: result.statusText,
-        responseTime,
-        ...(historyScriptTests.length ? { scriptTests: historyScriptTests } : {}),
-        ...(historyScriptLogs.length ? { scriptLogs: historyScriptLogs } : {}),
-        ...(historyScriptError ? { scriptError: historyScriptError } : {}),
-      });
-      historyRecorded = true;
-    } catch (cause) {
-      const message = cause instanceof Error ? cause.message : 'Request failed';
-      setError(message);
-      if (requestAttempted && !historyRecorded) {
-        onExecutionComplete?.({
-          request: historyRequest,
-          scripts: historyScripts,
-          executedMethod,
-          resolvedUrl,
-          responseTime: startedAt ? Date.now() - startedAt : undefined,
-          error: message,
-          ...(historyScriptLogs.length ? { scriptLogs: historyScriptLogs } : {}),
-        });
-      }
-    } finally { setLoading(false); }
-  };
+    }
+    if (outcome.result) onExecutionComplete?.(outcome.result);
+  } finally {
+    setLoading(false);
+  }
+};
 
   const passedTests = scriptTests.filter((test) => test.passed).length;
 
