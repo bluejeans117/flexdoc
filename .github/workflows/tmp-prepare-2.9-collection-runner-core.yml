@@ -1,0 +1,515 @@
+name: Temporary 2.9 Collection Runner Core
+
+on:
+  push:
+    branches:
+      - tmp/prepare-2.9-collection-runner-core
+
+permissions:
+  contents: write
+
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out branch
+        uses: actions/checkout@v6
+        with:
+          ref: tmp/prepare-2.9-collection-runner-core
+          fetch-depth: 0
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: '22.22.3'
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci --ignore-scripts --no-audit --no-fund
+
+      - name: Generate collection runner core
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          from textwrap import dedent
+
+          workspace_path = Path('packages/client/src/utils/api-client-workspace.ts')
+          workspace = workspace_path.read_text()
+          workspace = workspace.replace(
+            "import type { ApiClientRequestScripts, ApiClientScriptTestResult } from './api-client-scripting';",
+            "import type { ApiClientRequestScripts, ApiClientScriptCollectionChange, ApiClientScriptEnvironmentChange, ApiClientScriptTestResult } from './api-client-scripting';",
+          )
+          marker = "export function deleteApiClientEnvironment(workspace: ApiClientWorkspaceState, environmentId: string): ApiClientWorkspaceState {"
+          helpers = dedent('''
+          export function applyApiClientEnvironmentChanges(
+            workspace: ApiClientWorkspaceState,
+            changes: ApiClientScriptEnvironmentChange[],
+          ): ApiClientWorkspaceState {
+            if (!workspace.activeEnvironmentId || changes.length === 0) return workspace;
+            const environmentIndex = workspace.environments.findIndex((environment) => environment.id === workspace.activeEnvironmentId);
+            if (environmentIndex < 0) return workspace;
+
+            const environment = workspace.environments[environmentIndex];
+            let variables = environment.variables.map((variable) => ({ ...variable }));
+            let changed = false;
+            for (const change of changes) {
+              const key = change.key.trim();
+              if (!key) continue;
+              if (change.action === 'unset') {
+                const next = variables.filter((variable) => variable.key.trim() !== key);
+                if (next.length !== variables.length) {
+                  variables = next;
+                  changed = true;
+                }
+                continue;
+              }
+              const indexes = variables
+                .map((variable, index) => variable.key.trim() === key ? index : -1)
+                .filter((index) => index >= 0);
+              const value = change.value || '';
+              if (indexes.length > 0) {
+                const first = indexes[0];
+                variables[first] = { ...variables[first], key, value, enabled: true };
+                if (indexes.length > 1) variables = variables.filter((variable, index) => index === first || variable.key.trim() !== key);
+              } else {
+                variables.push({ id: createApiClientId('variable'), key, value, enabled: true });
+              }
+              changed = true;
+            }
+            if (!changed) return workspace;
+            const environments = workspace.environments.map((candidate, index) => index === environmentIndex
+              ? { ...candidate, variables, updatedAt: now() }
+              : candidate);
+            return { ...workspace, environments };
+          }
+
+          export function applyApiClientCollectionChanges(
+            workspace: ApiClientWorkspaceState,
+            collectionId: string | undefined,
+            changes: ApiClientScriptCollectionChange[],
+          ): ApiClientWorkspaceState {
+            if (!collectionId || changes.length === 0) return workspace;
+            const collectionIndex = workspace.collections.findIndex((collection) => collection.id === collectionId);
+            if (collectionIndex < 0) return workspace;
+
+            const collection = workspace.collections[collectionIndex];
+            let variables = collection.variables.map((variable) => ({ ...variable }));
+            let changed = false;
+            for (const change of changes) {
+              const key = change.key.trim();
+              if (!key) continue;
+              if (change.action === 'unset') {
+                const next = variables.filter((variable) => variable.key.trim() !== key);
+                if (next.length !== variables.length) {
+                  variables = next;
+                  changed = true;
+                }
+                continue;
+              }
+              const indexes = variables
+                .map((variable, index) => variable.key.trim() === key ? index : -1)
+                .filter((index) => index >= 0);
+              const value = change.value || '';
+              if (indexes.length > 0) {
+                const first = indexes[0];
+                variables[first] = { ...variables[first], key, value, enabled: true };
+                if (indexes.length > 1) variables = variables.filter((variable, index) => index === first || variable.key.trim() !== key);
+              } else {
+                variables.push({ id: createApiClientId('variable'), key, value, enabled: true });
+              }
+              changed = true;
+            }
+            if (!changed) return workspace;
+            const collections = workspace.collections.map((candidate, index) => index === collectionIndex
+              ? { ...candidate, variables, updatedAt: now() }
+              : candidate);
+            return { ...workspace, collections };
+          }
+
+          ''')
+          if 'export function applyApiClientEnvironmentChanges(' not in workspace:
+            if marker not in workspace:
+              raise SystemExit('workspace insertion marker not found')
+            workspace = workspace.replace(marker, helpers + marker, 1)
+          workspace_path.write_text(workspace)
+
+          component_path = Path('packages/client/src/components/ApiClientWorkspace.tsx')
+          component = component_path.read_text()
+          start = component.index('function applyEnvironmentChanges(')
+          end = component.index('export const ApiClientWorkspace', start)
+          component = component[:start] + component[end:]
+          component = component.replace(
+            '  activeApiClientEnvironmentVariables,\n  addApiClientHistoryEntry,',
+            '  activeApiClientEnvironmentVariables,\n  addApiClientHistoryEntry,\n  applyApiClientCollectionChanges,\n  applyApiClientEnvironmentChanges,',
+          )
+          component = component.replace('applyCollectionChanges(current, collectionId, changes)', 'applyApiClientCollectionChanges(current, collectionId, changes)')
+          component = component.replace('applyEnvironmentChanges(current, changes)', 'applyApiClientEnvironmentChanges(current, changes)')
+          component_path.write_text(component)
+
+          runner = dedent('''
+          import { executeApiClientRequest } from './api-client-execution';
+          import type { ApiClientExecutionOutcome, ExecuteApiClientRequestOptions } from './api-client-execution';
+          import type { HttpVariables } from './http-client';
+          import type { ApiClientScriptCollectionChange, ApiClientScriptEnvironmentChange } from './api-client-scripting';
+          import {
+            activeApiClientEnvironmentVariables,
+            addApiClientHistoryEntry,
+            apiClientCollectionVariables,
+            applyApiClientCollectionChanges,
+            applyApiClientEnvironmentChanges,
+            resolveApiClientAuth,
+          } from './api-client-workspace';
+          import type { ApiClientSavedRequest, ApiClientWorkspaceState } from './api-client-workspace';
+
+          export interface ApiClientCollectionRunItem {
+            requestId: string;
+            requestName: string;
+            collectionId: string;
+            folderId?: string;
+            passed: boolean;
+            outcome: ApiClientExecutionOutcome;
+          }
+
+          export interface ApiClientCollectionRunResult {
+            collectionId: string;
+            folderId?: string;
+            total: number;
+            completed: number;
+            passed: number;
+            failed: number;
+            stopped: boolean;
+            items: ApiClientCollectionRunItem[];
+            workspace: ApiClientWorkspaceState;
+          }
+
+          export interface RunApiClientCollectionOptions {
+            workspace: ApiClientWorkspaceState;
+            collectionId: string;
+            folderId?: string;
+            credentials?: RequestCredentials;
+            requestInterceptor?: ExecuteApiClientRequestOptions['requestInterceptor'];
+            externalVariables?: HttpVariables;
+            externalEnvironmentVariables?: HttpVariables;
+            stopOnFailure?: boolean;
+            fetcher?: typeof globalThis.fetch;
+            now?: () => number;
+            onRequestStart?: (request: ApiClientSavedRequest, index: number, total: number) => void;
+            onRequestComplete?: (item: ApiClientCollectionRunItem, index: number, total: number) => void;
+            onCollectionChanges?: (changes: ApiClientScriptCollectionChange[]) => void;
+            onEnvironmentChanges?: (changes: ApiClientScriptEnvironmentChange[]) => void;
+          }
+
+          function folderScope(workspace: ApiClientWorkspaceState, collectionId: string, folderId?: string): Set<string> | null {
+            if (!folderId) return null;
+            const root = workspace.folders.find((folder) => folder.id === folderId && folder.collectionId === collectionId);
+            if (!root) return new Set();
+            const scoped = new Set([root.id]);
+            let changed = true;
+            while (changed) {
+              changed = false;
+              for (const folder of workspace.folders) {
+                if (folder.collectionId !== collectionId || !folder.parentFolderId || scoped.has(folder.id)) continue;
+                if (scoped.has(folder.parentFolderId)) {
+                  scoped.add(folder.id);
+                  changed = true;
+                }
+              }
+            }
+            return scoped;
+          }
+
+          export function apiClientCollectionRunRequests(
+            workspace: ApiClientWorkspaceState,
+            collectionId: string,
+            folderId?: string,
+          ): ApiClientSavedRequest[] {
+            const scope = folderScope(workspace, collectionId, folderId);
+            return workspace.requests.filter((request) => {
+              if (request.collectionId !== collectionId) return false;
+              if (!scope) return true;
+              return !!request.folderId && scope.has(request.folderId);
+            });
+          }
+
+          function outcomePassed(outcome: ApiClientExecutionOutcome): boolean {
+            return !outcome.error
+              && !outcome.scriptError
+              && outcome.scriptTests.every((test) => test.passed);
+          }
+
+          export async function runApiClientCollection(options: RunApiClientCollectionOptions): Promise<ApiClientCollectionRunResult> {
+            const requests = apiClientCollectionRunRequests(options.workspace, options.collectionId, options.folderId);
+            let workspace = options.workspace;
+            const items: ApiClientCollectionRunItem[] = [];
+            let stopped = false;
+
+            for (let index = 0; index < requests.length; index += 1) {
+              const savedRequest = requests[index];
+              options.onRequestStart?.(savedRequest, index, requests.length);
+              const collectionVariables = apiClientCollectionVariables(workspace, options.collectionId);
+              const workspaceEnvironmentVariables = activeApiClientEnvironmentVariables(workspace);
+              const environmentVariables = {
+                ...(options.externalEnvironmentVariables || {}),
+                ...workspaceEnvironmentVariables,
+              };
+              const variables = {
+                ...collectionVariables,
+                ...(options.externalVariables || {}),
+                ...environmentVariables,
+              };
+
+              const outcome = await executeApiClientRequest({
+                request: savedRequest.request,
+                scripts: savedRequest.scripts,
+                credentials: options.credentials,
+                requestInterceptor: options.requestInterceptor,
+                resolveAuth: (auth) => resolveApiClientAuth(
+                  workspace,
+                  savedRequest.collectionId,
+                  savedRequest.folderId,
+                  auth || { type: 'none' },
+                ),
+                variables,
+                collectionVariables,
+                externalVariables: options.externalVariables,
+                environmentVariables,
+                fetcher: options.fetcher,
+                now: options.now,
+                onCollectionChanges: (changes) => {
+                  workspace = applyApiClientCollectionChanges(workspace, savedRequest.collectionId, changes);
+                  options.onCollectionChanges?.(changes);
+                },
+                onEnvironmentChanges: (changes) => {
+                  workspace = applyApiClientEnvironmentChanges(workspace, changes);
+                  options.onEnvironmentChanges?.(changes);
+                },
+              });
+
+              if (outcome.result) {
+                workspace = addApiClientHistoryEntry(workspace, {
+                  ...outcome.result,
+                  collectionId: savedRequest.collectionId,
+                  folderId: savedRequest.folderId,
+                });
+              }
+
+              const item: ApiClientCollectionRunItem = {
+                requestId: savedRequest.id,
+                requestName: savedRequest.name,
+                collectionId: savedRequest.collectionId,
+                folderId: savedRequest.folderId,
+                passed: outcomePassed(outcome),
+                outcome,
+              };
+              items.push(item);
+              options.onRequestComplete?.(item, index, requests.length);
+              if (!item.passed && options.stopOnFailure) {
+                stopped = index < requests.length - 1;
+                break;
+              }
+            }
+
+            const passed = items.filter((item) => item.passed).length;
+            return {
+              collectionId: options.collectionId,
+              folderId: options.folderId,
+              total: requests.length,
+              completed: items.length,
+              passed,
+              failed: items.length - passed,
+              stopped,
+              items,
+              workspace,
+            };
+          }
+          ''').lstrip()
+          Path('packages/client/src/utils/api-client-runner.ts').write_text(runner)
+
+          tests = dedent('''
+          import { apiClientCollectionRunRequests, runApiClientCollection } from './api-client-runner';
+          import type { ApiClientWorkspaceState } from './api-client-workspace';
+
+          function response(body = '{}', status = 200): Response {
+            return {
+              status,
+              statusText: status === 200 ? 'OK' : 'Error',
+              headers: new Headers({ 'content-type': 'application/json' }),
+              text: async () => body,
+            } as Response;
+          }
+
+          function workspace(): ApiClientWorkspaceState {
+            const timestamp = '2026-09-05T00:00:00.000Z';
+            return {
+              version: 6,
+              collections: [{
+                id: 'collection',
+                name: 'Runner',
+                auth: { type: 'bearer', token: 'collection-token' },
+                variables: [
+                  { id: 'v-base', key: 'baseUrl', value: 'https://api.example.test', enabled: true },
+                  { id: 'v-seed', key: 'seed', value: 'initial', enabled: true },
+                ],
+                createdAt: timestamp,
+                updatedAt: timestamp,
+              }],
+              folders: [
+                { id: 'parent', collectionId: 'collection', name: 'Parent', auth: { type: 'apiKey', key: 'X-Folder', value: 'folder-key', in: 'header' }, createdAt: timestamp, updatedAt: timestamp },
+                { id: 'child', collectionId: 'collection', parentFolderId: 'parent', name: 'Child', auth: { type: 'inherit' }, createdAt: timestamp, updatedAt: timestamp },
+                { id: 'other', collectionId: 'collection', name: 'Other', auth: { type: 'inherit' }, createdAt: timestamp, updatedAt: timestamp },
+              ],
+              requests: [
+                {
+                  id: 'first', collectionId: 'collection', folderId: 'parent', name: 'Set variables',
+                  request: { method: 'GET', url: '{{baseUrl}}/first', auth: { type: 'inherit' } },
+                  scripts: {
+                    preRequest: "flex.collection.set('seed', 'next'); flex.environment.set('runId', '42');",
+                    tests: "flex.test('first passed', () => flex.expect(flex.response.code).to.equal(200));",
+                  },
+                  createdAt: timestamp, updatedAt: timestamp,
+                },
+                {
+                  id: 'second', collectionId: 'collection', folderId: 'child', name: 'Use variables',
+                  request: { method: 'GET', url: '{{baseUrl}}/second/{{seed}}/{{runId}}', auth: { type: 'inherit' } },
+                  scripts: { preRequest: '', tests: "flex.test('second passed', () => flex.expect(flex.response.code).to.equal(200));" },
+                  createdAt: timestamp, updatedAt: timestamp,
+                },
+                {
+                  id: 'third', collectionId: 'collection', folderId: 'other', name: 'Other folder',
+                  request: { method: 'GET', url: '{{baseUrl}}/third', auth: { type: 'inherit' } },
+                  createdAt: timestamp, updatedAt: timestamp,
+                },
+              ],
+              environments: [{
+                id: 'environment', name: 'Local', variables: [], createdAt: timestamp, updatedAt: timestamp,
+              }],
+              activeEnvironmentId: 'environment',
+              history: [],
+            };
+          }
+
+          describe('api-client-runner', () => {
+            it('selects a folder and all of its descendants in saved request order', () => {
+              expect(apiClientCollectionRunRequests(workspace(), 'collection', 'parent').map((request) => request.id)).toEqual(['first', 'second']);
+              expect(apiClientCollectionRunRequests(workspace(), 'collection').map((request) => request.id)).toEqual(['first', 'second', 'third']);
+              expect(apiClientCollectionRunRequests(workspace(), 'collection', 'missing')).toEqual([]);
+            });
+
+            it('runs sequentially through the shared executor and carries script mutations into later requests', async () => {
+              const urls: string[] = [];
+              const folderHeaders: Array<string | null> = [];
+              const fetcher: typeof fetch = async (input, init) => {
+                urls.push(String(input));
+                folderHeaders.push(new Headers(init?.headers).get('x-folder'));
+                return response('{"ok":true}');
+              };
+
+              const result = await runApiClientCollection({
+                workspace: workspace(),
+                collectionId: 'collection',
+                folderId: 'parent',
+                fetcher,
+              });
+
+              expect(urls).toEqual([
+                'https://api.example.test/first',
+                'https://api.example.test/second/next/42',
+              ]);
+              expect(folderHeaders).toEqual(['folder-key', 'folder-key']);
+              expect(result).toMatchObject({ total: 2, completed: 2, passed: 2, failed: 0, stopped: false });
+              expect(result.items.map((item) => item.requestId)).toEqual(['first', 'second']);
+              expect(result.workspace.collections[0].variables.find((variable) => variable.key === 'seed')?.value).toBe('next');
+              expect(result.workspace.environments[0].variables.find((variable) => variable.key === 'runId')?.value).toBe('42');
+              expect(result.workspace.history).toHaveLength(2);
+              expect(result.workspace.history[0].resolvedUrl).toBe('https://api.example.test/second/next/42');
+            });
+
+            it('marks test failures without treating HTTP status alone as a failed run item', async () => {
+              const state = workspace();
+              state.requests = [{
+                ...state.requests[0],
+                id: 'expected-404',
+                scripts: { preRequest: '', tests: "flex.test('expected', () => flex.expect(flex.response.code).to.equal(404));" },
+              }];
+              const result = await runApiClientCollection({
+                workspace: state,
+                collectionId: 'collection',
+                fetcher: async () => response('{"missing":true}', 404),
+              });
+              expect(result.items[0].passed).toBe(true);
+              expect(result.passed).toBe(1);
+              expect(result.failed).toBe(0);
+            });
+
+            it('can stop after a transport failure and leaves later requests unexecuted', async () => {
+              let calls = 0;
+              const result = await runApiClientCollection({
+                workspace: workspace(),
+                collectionId: 'collection',
+                stopOnFailure: true,
+                fetcher: async () => {
+                  calls += 1;
+                  throw new Error('offline');
+                },
+              });
+              expect(calls).toBe(1);
+              expect(result).toMatchObject({ total: 3, completed: 1, passed: 0, failed: 1, stopped: true });
+              expect(result.items[0].outcome.error).toBe('offline');
+              expect(result.workspace.history).toHaveLength(1);
+            });
+          });
+          ''').lstrip()
+          Path('packages/client/src/utils/api-client-runner.test.ts').write_text(tests)
+
+          index_path = Path('packages/client/src/index.ts')
+          index = index_path.read_text()
+          execution_export = "export { executeApiClientRequest } from './utils/api-client-execution';\n"
+          runner_exports = (
+            "export { apiClientCollectionRunRequests, runApiClientCollection } from './utils/api-client-runner';\n"
+            "export type { ApiClientCollectionRunItem, ApiClientCollectionRunResult, RunApiClientCollectionOptions } from './utils/api-client-runner';\n"
+          )
+          if runner_exports not in index:
+            if execution_export not in index:
+              raise SystemExit('index execution export marker not found')
+            index = index.replace(execution_export, execution_export + runner_exports, 1)
+          index_path.write_text(index)
+          PY
+
+      - name: Validate focused diff
+        run: |
+          git add -N packages/client/src/utils/api-client-runner.ts packages/client/src/utils/api-client-runner.test.ts
+          git diff --check
+          changed=$(git diff --name-only)
+          printf '%s\n' "$changed"
+          unexpected=$(printf '%s\n' "$changed" | grep -Ev '^(packages/client/src/components/ApiClientWorkspace\.tsx|packages/client/src/index\.ts|packages/client/src/utils/api-client-workspace\.ts|packages/client/src/utils/api-client-runner\.ts|packages/client/src/utils/api-client-runner\.test\.ts)$' || true)
+          if [ -n "$unexpected" ]; then
+            echo "Unexpected changed files:"
+            echo "$unexpected"
+            exit 1
+          fi
+          test "$(printf '%s\n' "$changed" | sed '/^$/d' | wc -l)" -eq 5
+
+      - name: Build core
+        run: npm run build:core
+
+      - name: Lint client
+        run: npm run lint -w packages/client
+
+      - name: Test client
+        run: npm run test -w packages/client -- --runInBand
+
+      - name: Build client
+        run: npm run build -w packages/client
+
+      - name: Commit validated runner core
+        run: |
+          git config user.name 'Vishnu R'
+          git config user.email '45818225+bluejeans117@users.noreply.github.com'
+          git add packages/client/src/components/ApiClientWorkspace.tsx \
+                  packages/client/src/index.ts \
+                  packages/client/src/utils/api-client-workspace.ts \
+                  packages/client/src/utils/api-client-runner.ts \
+                  packages/client/src/utils/api-client-runner.test.ts
+          git commit -m 'feat: api-client/2.9: add collection runner core' \
+            -m 'Add a sequential collection and folder runner built on the shared request executor. Carry collection and environment script mutations between saved requests, preserve inherited auth and history recording, centralize workspace mutation helpers, and expose runner APIs with focused coverage.'
+          git push origin HEAD:tmp/prepare-2.9-collection-runner-core
